@@ -13,17 +13,68 @@
 (defprotocol IIncremental
   (-identify [incr] "Returns a unique identifier for the incremental object"))
 
+
+(defprotocol IReaction
+  (-propagate! [reaction dep]))
+
 (def default-env (env/create-env))
 
 
 (def ^:dynamic *environment* default-env)
 
 
+(def ^:dynamic *deps* nil)
+
+
+(def sentinel ::unknown)
+
+
+(defn raise-deref!
+  [incr]
+  (env/add-ref! *environment* (-identify incr) incr)
+  (if *deps*
+    (do (prn :deps) (swap! *deps* conj incr) true)
+    false))
+
+
+(defn connect!
+  [reaction f]
+  (let [id (-identify reaction)
+        v (env/current-val *environment* id sentinel)
+        deps' (atom #{})
+        v' (binding [*deps* deps']
+             (f v))]
+    (doseq [dep @deps']
+      (env/add-relation! *environment* (-identify dep) id))
+    (prn (env/relations *environment* id))
+    (env/set-val! *environment* (-identify reaction) v')
+    v'))
+
+
+(deftype IncrementalReaction [identity reducer f]
+  IReaction
+  (-propagate! [this _dep]
+    ;; recalculate
+    (connect! this #(reducer % (f))))
+
+  IIncremental
+  (-identify [this] identity)
+
+  clojure.lang.IDeref
+  (deref [this]
+    (raise-deref! this)
+    (let [v (env/current-val *environment* identity sentinel)]
+      (if (= sentinel v)
+        ;; not cached
+        (connect! this #(reducer % (f)))
+        v))))
+
+
 (deftype IncrementalSource [identity reducer initial]
   ISource
   (-receive [this x]
     (reducer
-     (env/current-val *environment* (-identify this) initial)
+     (env/current-val *environment* identity initial)
      x))
 
   IIncremental
@@ -31,7 +82,8 @@
 
   clojure.lang.IDeref
   (deref [this]
-    (env/current-val *environment* (-identify this) initial)))
+    (raise-deref! this)
+    (env/current-val *environment* identity initial)))
 
 
 (defn- mote-reducer
@@ -47,16 +99,30 @@
    initial))
 
 
+(defn reaction
+  [f]
+  (->IncrementalReaction
+   (gensym "incr_reaction")
+   (fn [_ v] v)
+   f))
+
+
 (def scheduler (scheduler/future-scheduler))
 
-(defn send [m x]
+(defn send [src x]
   (scheduler/schedule
    scheduler
    nil
    (fn []
      (let [env' (env/branch *environment*)
-           v (-receive m x)]
-       (env/set-val! env' (-identify m) v)
+           v (-receive src x)
+           id (-identify src)
+           {:keys [reactions]} (env/relations env' id)]
+       (env/set-val! env' id v)
+       (prn reactions)
+       (doseq [rid reactions]
+         (binding [*environment* env']
+           (-propagate! (env/get-ref env' rid) src)))
        (if (env/is-parent? *environment* env')
          (env/commit! *environment* env')
          (do (prn :retry)

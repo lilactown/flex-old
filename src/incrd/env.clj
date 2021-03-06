@@ -6,7 +6,8 @@
   []
   (atom {:version (gensym "env")
          :values {}
-         :graph {}}))
+         :graph {}
+         :refs {}}))
 
 
 (defn current-val
@@ -17,6 +18,43 @@
 (defn set-val!
   [env id v]
   (swap! env assoc-in [:values id] v))
+
+
+(defn add-relation!
+  [env src-id reaction-id]
+  (swap! env
+         (fn [env-map]
+           (-> env-map
+               (update-in [:graph :sources src-id]
+                          (fnil conj #{}) reaction-id)
+               (update-in [:graph :reactions reaction-id]
+                          (fnil conj #{}) src-id)))))
+
+
+(defn remove-relation!
+  [env src-id reaction-id]
+  (swap! env
+         (fn [env-map]
+           (-> env-map
+               (update-in [:graph :sources src-id] disj reaction-id)
+               (update-in [:graph :reactions reaction-id] disj src-id)))))
+
+
+(defn relations
+  [env id]
+  (let [env-map @env]
+    {:reactions (get-in env-map [:graph :sources id] #{})
+     :deps (get-in env-map [:graph :reactions id] #{})}))
+
+
+(defn add-ref!
+  [env id o]
+  (swap! env assoc-in [:refs id] o))
+
+
+(defn get-ref
+  [env id]
+  (get-in @env [:refs id]))
 
 
 (defn branch

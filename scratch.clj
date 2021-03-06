@@ -1,4 +1,4 @@
-(require '[incrd.core :as incrd :refer [mote send]])
+(require '[incrd.core :as incrd :refer [mote send reaction]])
 
 ;; -- changing state
 
@@ -22,3 +22,15 @@
                   (dec n)))
     @(send count dec)
     @count)
+
+
+(def count*2
+  (reaction #(* 2 @count)))
+
+@count*2
+
+(send count inc)
+
+@count
+
+@count*2
