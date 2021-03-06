@@ -1,9 +1,9 @@
 (ns incrd.core
+  (:require
+   [incrd.env :as env]
+   [incrd.scheduler :as scheduler])
   (:refer-clojure :exclude [send]))
 
-
-(defprotocol IEnvironment
-  (-current-val [env incr initial]))
 
 
 (defprotocol ISource
@@ -13,14 +13,7 @@
 (defprotocol IIncremental
   (-identify [incr] "Returns a unique identifier for the incremental object"))
 
-
-(defrecord Environment [incr-values incr-graph]
-  IEnvironment
-  (-current-val [this incr initial]
-    (get @incr-values (-identify incr) initial)))
-
-
-(def default-env (->Environment (atom {}) (atom {})))
+(def default-env (env/create-env))
 
 
 (def ^:dynamic *environment* default-env)
@@ -30,7 +23,7 @@
   ISource
   (-receive [this x]
     (reducer
-     (-current-val *environment* this initial)
+     (env/current-val *environment* (-identify this) initial)
      x))
 
   IIncremental
@@ -38,7 +31,7 @@
 
   clojure.lang.IDeref
   (deref [this]
-    (-current-val *environment* this initial)))
+    (env/current-val *environment* (-identify this) initial)))
 
 
 (defn- mote-reducer
@@ -54,11 +47,17 @@
    initial))
 
 
+(def scheduler (scheduler/future-scheduler))
+
 (defn send [m x]
-  (future
-    (Thread/sleep 100)
-    (let [v (-receive m x)]
-      (swap! (:incr-values *environment*)
-             assoc
-             (-identify m)
-             v))))
+  (scheduler/schedule
+   scheduler
+   nil
+   (fn []
+     (let [env' (env/branch *environment*)
+           v (-receive m x)]
+       (env/set-val! env' (-identify m) v)
+       (if (env/is-parent? *environment* env')
+         (env/commit! *environment* env')
+         (do (prn :retry)
+             (recur)))))))
