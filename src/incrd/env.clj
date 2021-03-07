@@ -49,12 +49,22 @@
 
 (defn add-ref!
   [env id o]
-  (swap! env assoc-in [:refs id] o))
+  (swap! env assoc-in [:refs id :obj] o))
 
 
 (defn get-ref
   [env id]
-  (get-in @env [:refs id]))
+  (get-in @env [:refs id :obj]))
+
+
+(defn set-order!
+  [env id order]
+  (swap! env assoc-in [:refs id :order] order))
+
+
+(defn get-order
+  [env id]
+  (get-in @env [:refs id :order] 0))
 
 
 (defn branch

@@ -39,15 +39,21 @@
 
 (defn connect!
   [reaction f]
-  (let [id (-identify reaction)
+  (let [env *environment*
+        id (-identify reaction)
         v (env/current-val *environment* id sentinel)
         deps' (atom #{})
         v' (binding [*deps* deps']
              (f v))]
     (doseq [dep @deps']
-      (env/add-relation! *environment* (-identify dep) id))
-    (prn (env/relations *environment* id))
-    (env/set-val! *environment* (-identify reaction) v')
+      (env/add-relation! env (-identify dep) id))
+    (let [order (->> (for [dep @deps']
+                       (env/get-order env (-identify dep)))
+                     (apply max)
+                     (inc))]
+      (env/set-order! env id order))
+    (prn (env/relations env id))
+    (env/set-val! env (-identify reaction) v')
     v'))
 
 
@@ -119,8 +125,8 @@
            id (-identify src)
            {:keys [reactions]} (env/relations env' id)]
        (env/set-val! env' id v)
-       (prn reactions)
        (doseq [rid reactions]
+         (prn (env/get-order env' rid))
          (binding [*environment* env']
            (-propagate! (env/get-ref env' rid) src)))
        (if (env/is-parent? *environment* env')
