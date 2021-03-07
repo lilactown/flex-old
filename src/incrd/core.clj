@@ -52,7 +52,6 @@
                      (apply max)
                      (inc))]
       (env/set-order! env id order))
-    (prn (env/relations env id))
     (env/set-val! env (-identify reaction) v')
     v'))
 
@@ -115,6 +114,22 @@
 
 (def scheduler (scheduler/future-scheduler))
 
+
+(defn- into-heap
+  ([order+reactions]
+   (into-heap (sorted-map) order+reactions))
+  ([heap order+reactions]
+   (reduce
+    (fn [m [order reaction]]
+      (update
+       m
+       order
+       (fnil conj #{})
+       reaction))
+    heap
+    order+reactions)))
+
+
 (defn send [src x]
   (scheduler/schedule
    scheduler
@@ -125,10 +140,31 @@
            id (-identify src)
            {:keys [reactions]} (env/relations env' id)]
        (env/set-val! env' id v)
-       (doseq [rid reactions]
-         (prn (env/get-order env' rid))
-         (binding [*environment* env']
-           (-propagate! (env/get-ref env' rid) src)))
+       (loop [heap (into-heap (map (fn [rid]
+                                     [(env/get-order env' rid)
+                                      (env/get-ref env' rid)])
+                                   reactions))]
+         (prn heap)
+         (when-let [[order reactions] (first heap)]
+           (when-let [reaction (first reactions)]
+             (binding [*environment* env']
+               (-propagate! reaction src))
+             (let [{:keys [reactions]} (env/relations env' (-identify reaction))
+                   heap' (-> heap
+                             ;; remove reaction from the heap
+                             (update order disj reaction)
+                             ;; add new reactions to the heap
+                             (into-heap
+                              (map (fn [rid]
+                                     [(env/get-order env' rid)
+                                      (env/get-ref env' rid)])
+                                   reactions)))]
+               (recur
+                (if (zero? (count (get heap' order)))
+                  ;; no reactions left in this order, dissoc it so that the
+                  ;; lowest order is always first
+                  (dissoc heap' order)
+                  heap'))))))
        (if (env/is-parent? *environment* env')
          (env/commit! *environment* env')
          (do (prn :retry)

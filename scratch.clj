@@ -34,3 +34,9 @@
 @count
 
 @count*2
+
+
+(def count-str
+  (reaction #(str "The count x 2 is " @count*2)))
+
+@count-str
