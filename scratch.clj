@@ -1,4 +1,4 @@
-(require '[incrd.core :as incrd :refer [mote send reaction]])
+(require '[incrd.core :as incrd :refer [mote send reaction with-env env]])
 
 ;; -- changing state
 
@@ -45,3 +45,13 @@
 @count*3
 
 @end
+
+
+(def my-env (env))
+
+(with-env my-env
+  @end)
+
+(with-env my-env
+  (send count inc)
+  (send count inc))

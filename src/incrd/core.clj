@@ -17,6 +17,7 @@
 (defprotocol IReaction
   (-propagate! [reaction dep]))
 
+
 (def default-env (env/create-env))
 
 
@@ -132,41 +133,54 @@
 
 
 (defn send [src x]
-  (scheduler/schedule
-   scheduler
-   nil
-   (fn []
-     (let [env' (env/branch *environment*)
-           v (-receive src x)
-           id (-identify src)
-           {:keys [reactions]} (env/relations env' id)]
-       (env/set-val! env' id v)
-       (loop [heap (into-heap (map (fn [rid]
-                                     [(env/get-order env' rid)
-                                      (env/get-ref env' rid)])
-                                   reactions))]
-         (prn heap)
-         (when-let [[order reactions] (first heap)]
-           (when-let [reaction (first reactions)]
-             (binding [*environment* env']
-               (-propagate! reaction src))
-             (let [{:keys [reactions]} (env/relations env' (-identify reaction))
-                   heap' (-> heap
-                             ;; remove reaction from the heap
-                             (update order disj reaction)
-                             ;; add new reactions to the heap
-                             (into-heap
-                              (map (fn [rid]
-                                     [(env/get-order env' rid)
-                                      (env/get-ref env' rid)])
-                                   reactions)))]
-               (recur
-                (if (zero? (count (get heap' order)))
-                  ;; no reactions left in this order, dissoc it so that the
-                  ;; lowest order is always first
-                  (dissoc heap' order)
-                  heap'))))))
-       (if (env/is-parent? *environment* env')
-         (env/commit! *environment* env')
-         (do (prn :retry)
-             (recur)))))))
+  (let [env *environment*]
+    (scheduler/schedule
+     scheduler
+     nil
+     (fn []
+       (let [env' (env/branch env)
+             v (-receive src x)
+             id (-identify src)
+             {:keys [reactions]} (env/relations env' id)]
+         (env/set-val! env' id v)
+         (loop [heap (into-heap (map (fn [rid]
+                                       [(env/get-order env' rid)
+                                        (env/get-ref env' rid)])
+                                     reactions))]
+           (prn heap)
+           (when-let [[order reactions] (first heap)]
+             (when-let [reaction (first reactions)]
+               (binding [*environment* env']
+                 (-propagate! reaction src))
+               (let [{:keys [reactions]} (env/relations env' (-identify reaction))
+                     heap' (-> heap
+                               ;; remove reaction from the heap
+                               (update order disj reaction)
+                               ;; add new reactions to the heap
+                               (into-heap
+                                (map (fn [rid]
+                                       [(env/get-order env' rid)
+                                        (env/get-ref env' rid)])
+                                     reactions)))]
+                 (recur
+                  (if (zero? (count (get heap' order)))
+                    ;; no reactions left in this order, dissoc it so that the
+                    ;; lowest order is always first
+                    (dissoc heap' order)
+                    heap'))))))
+         (if (env/is-parent? *environment* env')
+           (env/commit! *environment* env')
+           (do (prn :retry)
+               (recur))))))))
+
+
+;; override env
+
+(defn env []
+  (env/create-env))
+
+
+(defmacro with-env
+  [env & body]
+  `(binding [*environment* ~env]
+     ~@body))
