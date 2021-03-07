@@ -36,7 +36,12 @@
 @count*2
 
 
-(def count-str
-  (reaction #(str "The count x 2 is " @count*2)))
+(def count*3
+  (reaction #(* 3 @count)))
 
-@count-str
+(def end
+  (reaction #(vector @count*2 @count*3)))
+
+@count*3
+
+@end

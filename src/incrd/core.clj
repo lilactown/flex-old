@@ -33,18 +33,19 @@
   [incr]
   (env/add-ref! *environment* (-identify incr) incr)
   (if *deps*
-    (do (prn :deps) (swap! *deps* conj incr) true)
+    (do (swap! *deps* conj incr) true)
     false))
 
 
-(defn connect!
+(defn calculate!
   [reaction f]
   (let [env *environment*
         id (-identify reaction)
-        v (env/current-val *environment* id sentinel)
+        v (env/current-val env id sentinel)
         deps' (atom #{})
         v' (binding [*deps* deps']
              (f v))]
+    (prn :calculating id)
     (doseq [dep @deps']
       (env/add-relation! env (-identify dep) id))
     (let [order (->> (for [dep @deps']
@@ -60,7 +61,7 @@
   IReaction
   (-propagate! [this _dep]
     ;; recalculate
-    (connect! this #(reducer % (f))))
+    (calculate! this #(reducer % (f))))
 
   IIncremental
   (-identify [this] identity)
@@ -71,7 +72,7 @@
     (let [v (env/current-val *environment* identity sentinel)]
       (if (= sentinel v)
         ;; not cached
-        (connect! this #(reducer % (f)))
+        (calculate! this #(reducer % (f)))
         v))))
 
 
