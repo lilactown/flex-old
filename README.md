@@ -12,6 +12,23 @@ Goals
   * Why?
   * Would it share scheduler? Potential to be too greedy if not coordinated together
 
+## Features
+
+- [x] Simple containers `mote`
+- [x] Easy reactive computations `reaction`
+- [x] Topological sort
+- [ ] Cold watches `add-watch`
+- [ ] Hot watches (see Incremental)
+- [ ] Internal side effects `defer`
+- [ ] Task queue
+- [ ] Serialize to disk
+  - [ ] Stable names
+- [ ] Batching/transactions
+- [ ] Error handling
+- [ ] Garbage collection `dispose!`
+- [ ] Monadic API
+- [ ] Complex containers `source`
+
 
 ## API scratch
 

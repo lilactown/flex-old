@@ -49,6 +49,7 @@
     (prn :calculating id)
     (doseq [dep @deps']
       (env/add-relation! env (-identify dep) id))
+    ;; TODO remove relations
     (let [order (->> (for [dep @deps']
                        (env/get-order env (-identify dep)))
                      (apply max)
@@ -174,7 +175,9 @@
                (recur))))))))
 
 
-;; override env
+;;
+;; -- environments
+;;
 
 (defn env []
   (env/create-env))

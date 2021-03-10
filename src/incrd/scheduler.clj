@@ -15,9 +15,9 @@
       (Thread/sleep 10)
       (f)
       nil))
-  (cancel [_ _])
-  (pause [_])
-  (resume [_]))
+  #_(cancel [_ _])
+  #_(pause [_])
+  #_(resume [_]))
 
 
 (defn future-scheduler
