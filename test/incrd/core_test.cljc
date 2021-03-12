@@ -17,15 +17,15 @@
         (t/is (= 1 @n))))))
 
 
-(t/deftest async
+(t/deftest retry
   (let [n (i/mote 0)
         tx (i/send n (fn [n]
                        (Thread/sleep 10)
-                       (inc n)))]
+                       4))]
     @(i/send n inc)
     (t/is (= 1 @n))
     @tx
-    (t/is (= 2 @n))))
+    (t/is (= 4 @n))))
 
 
 (t/deftest connection
