@@ -1,5 +1,6 @@
 (ns incrd.core
   (:require
+   [clojure.set :as set]
    [incrd.env :as env]
    [incrd.scheduler :as scheduler])
   (:refer-clojure :exclude [send]))
@@ -27,7 +28,10 @@
 (def ^:dynamic *deps* nil)
 
 
-(def sentinel ::unknown)
+(def sentinel `unknown)
+
+
+(def disconnected `disconnected)
 
 
 (defn raise-deref!
@@ -38,24 +42,38 @@
     false))
 
 
-(defn calculate!
+(defn- calculate!
   [reaction f]
   (let [env *environment*
         id (-identify reaction)
         v (env/current-val env id sentinel)
-        deps' (atom #{})
-        v' (binding [*deps* deps']
-             (f v))]
-    (prn :calculating id)
-    (doseq [dep @deps']
-      (env/add-relation! env (-identify dep) id))
-    ;; TODO remove relations
-    (let [order (->> (for [dep @deps']
-                       (env/get-order env (-identify dep)))
+        {:keys [deps]} (env/relations env id)
+
+        deps-state (atom #{})
+        v' (binding [*deps* deps-state]
+             (f v))
+
+        deps' (into #{} (map -identify @deps-state))]
+    #_(prn :calculating id deps deps')
+
+    ;; add new relations
+    (doseq [dep deps']
+      (env/add-relation! env dep id))
+
+    ;; remove stale relations
+    (doseq [dep (set/difference deps deps')]
+      (env/remove-relation! env dep id))
+
+    ;; set order to be the max of any child's order + 1
+    (let [order (->> (for [dep deps']
+                       (env/get-order env dep))
                      (apply max)
                      (inc))]
       (env/set-order! env id order))
+
+    ;; set value in context
     (env/set-val! env (-identify reaction) v')
+
     v'))
 
 
@@ -70,11 +88,18 @@
 
   clojure.lang.IDeref
   (deref [this]
-    (raise-deref! this)
-    (let [v (env/current-val *environment* identity sentinel)]
-      (if (= sentinel v)
-        ;; not cached
+    (let [child-reaction? (raise-deref! this)
+          v (env/current-val *environment* identity sentinel)]
+      (cond
+        (and (not child-reaction?) (= sentinel v))
+        disconnected
+
+        ;; connected, not cached
+        (= sentinel v)
         (calculate! this #(reducer % (f)))
+
+        ;; connected, cached
+        :else
         v))))
 
 
@@ -115,6 +140,31 @@
    f))
 
 
+(defn connect!
+  [r]
+  (-propagate! r nil))
+
+
+(defn disconnect!
+  [r]
+  (let [env *environment*
+        id (-identify r)
+        {:keys [deps reactions]} (env/relations env id)]
+    (when (seq reactions)
+      (throw (ex-info "Cannot disconnect reaction which has dependents"
+                      {:reactions reactions})))
+
+    ;; remove all relations
+    (doseq [dep deps]
+      (env/remove-relation! env dep id))
+
+    ;; remove ref tracker to allow GC of reaction
+    (env/remove-ref! env id)
+
+    ;; remove value
+    (env/remove-val! env id)))
+
+
 (def scheduler (scheduler/future-scheduler))
 
 
@@ -148,7 +198,7 @@
                                        [(env/get-order env' rid)
                                         (env/get-ref env' rid)])
                                      reactions))]
-           (prn heap)
+           #_(prn heap)
            (when-let [[order reactions] (first heap)]
              (when-let [reaction (first reactions)]
                (binding [*environment* env']
