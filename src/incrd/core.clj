@@ -61,6 +61,7 @@
       (env/add-relation! env dep id))
 
     ;; remove stale relations
+    ;; TODO detect if this is last relation and should disconnect
     (doseq [dep (set/difference deps deps')]
       (env/remove-relation! env dep id))
 
@@ -103,35 +104,6 @@
         v))))
 
 
-(deftype IncrementalSource [identity reducer initial]
-  ISource
-  (-receive [this x]
-    (reducer
-     (env/current-val *environment* identity initial)
-     x))
-
-  IIncremental
-  (-identify [this] identity)
-
-  clojure.lang.IDeref
-  (deref [this]
-    (raise-deref! this)
-    (env/current-val *environment* identity initial)))
-
-
-(defn- mote-reducer
-  [current f]
-  (f current))
-
-
-(defn mote
-  [initial]
-  (->IncrementalSource
-   (gensym "incr_mote")
-   mote-reducer
-   initial))
-
-
 (defn reaction
   [f]
   (->IncrementalReaction
@@ -159,10 +131,56 @@
       (env/remove-relation! env dep id))
 
     ;; remove ref tracker to allow GC of reaction
-    (env/remove-ref! env id)
+    (env/clear-ref! env id)
 
     ;; remove value
-    (env/remove-val! env id)))
+    (env/clear-val! env id)))
+
+
+(defn connected?
+  [r]
+  (let [env *environment*
+        id (-identify r)
+        {:keys [deps reactions]} (env/relations env id)]
+    (or (seq deps)
+        (seq reactions)
+        (env/get-ref env id)
+        (not= disconnected
+              (env/current-val env id disconnected)))))
+
+
+;;
+;; -- Changing sources
+;;
+
+
+(deftype IncrementalSource [identity reducer initial]
+  ISource
+  (-receive [this x]
+    (reducer
+     (env/current-val *environment* identity initial)
+     x))
+
+  IIncremental
+  (-identify [this] identity)
+
+  clojure.lang.IDeref
+  (deref [this]
+    (raise-deref! this)
+    (env/current-val *environment* identity initial)))
+
+
+(defn- mote-reducer
+  [current f]
+  (f current))
+
+
+(defn mote
+  [initial]
+  (->IncrementalSource
+   (gensym "incr_mote")
+   mote-reducer
+   initial))
 
 
 (def scheduler (scheduler/future-scheduler))

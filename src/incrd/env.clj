@@ -20,7 +20,7 @@
   (swap! env assoc-in [:values id] v))
 
 
-(defn remove-val!
+(defn clear-val!
   [env id]
   (swap! env update :values dissoc id))
 
@@ -62,9 +62,9 @@
   (get-in @env [:refs id :obj]))
 
 
-(defn remove-ref!
+(defn clear-ref!
   [env id]
-  (swap! env update :refs dissoc :id))
+  (swap! env update :refs dissoc id))
 
 
 (defn set-order!

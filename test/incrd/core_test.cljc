@@ -8,7 +8,13 @@
   (let [n (i/mote 0)]
     (t/is (= 0 @n))
     @(i/send n inc)
-    (t/is (= 1 @n))))
+    (t/is (= 1 @n)))
+  (t/testing "with-env"
+    (i/with-env (i/env)
+      (let [n (i/mote 0)]
+        (t/is (= 0 @n))
+        @(i/send n inc)
+        (t/is (= 1 @n))))))
 
 
 (t/deftest async
@@ -41,9 +47,10 @@
     (t/is (= 2 @calls))
 
     (i/disconnect! r)
+    (t/is (not (i/connected? r)))
    @(i/send n inc)
     (t/is (= i/disconnected @r))
-    (t/is (= 2 @calls))))
+    (t/is (= 2 @calls) "Doesn't fire r again after d/c")))
 
 
 (t/deftest remove-stale
