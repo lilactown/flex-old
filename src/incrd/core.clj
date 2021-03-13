@@ -36,7 +36,6 @@
 
 (defn raise-deref!
   [incr]
-  (env/add-ref! *environment* (-identify incr) incr)
   (if *deps*
     (do (swap! *deps* conj incr) true)
     false))
@@ -55,6 +54,7 @@
 
         deps' (into #{} (map -identify @deps-state))]
     #_(prn :calculating id deps deps')
+    (env/add-ref! *environment* (-identify reaction) reaction)
 
     ;; add new relations
     (doseq [dep deps']
@@ -167,6 +167,7 @@
   clojure.lang.IDeref
   (deref [this]
     (raise-deref! this)
+    (env/add-ref! *environment* (-identify this) this)
     (env/current-val *environment* identity initial)))
 
 

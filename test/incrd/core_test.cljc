@@ -29,6 +29,12 @@
 
 
 (t/deftest connection
+  (t/testing "connection adds ref to the env"
+    (let [n (i/mote 0)
+          r (i/reaction #(* 2 @n))]
+      (i/connect! r)
+      @(i/send n inc)
+      (t/is (= 2 @r))))
   (let [n (i/mote 0)
         calls (atom 0)
         r (i/reaction (fn []
