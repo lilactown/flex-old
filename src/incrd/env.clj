@@ -1,13 +1,18 @@
-(ns incrd.env)
+(ns incrd.env
+  (:refer-clojure :exclude [empty?]))
+
+
+(def ^:private initial-env
+  {:version (gensym "env")
+   :values {}
+   :graph {}
+   :refs {}})
 
 
 (defn create-env
   "Creates a new environment"
   []
-  (atom {:version (gensym "env")
-         :values {}
-         :graph {}
-         :refs {}}))
+  (atom initial-env))
 
 
 (defn current-val
@@ -90,3 +95,13 @@
 (defn commit!
   [env branch]
   (reset! env (dissoc @branch :parent)))
+
+
+(defn clear-env!
+  [env]
+  (reset! env initial-env))
+
+
+(defn empty?
+  [env]
+  (= initial-env @env))

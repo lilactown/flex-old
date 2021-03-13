@@ -1,7 +1,16 @@
 (ns incrd.core-test
   (:require
    [clojure.test :as t]
-   [incrd.core :as i]))
+   [incrd.core :as i]
+   [incrd.env :as env]))
+
+
+(t/use-fixtures :each
+  (fn clear-env [f]
+    (env/clear-env! i/*environment*)
+    (t/testing "empty env before test"
+      (t/is (env/empty? i/*environment*)))
+    (f)))
 
 
 (t/deftest simple
@@ -9,7 +18,7 @@
     (t/is (= 0 @n))
     @(i/send n inc)
     (t/is (= 1 @n)))
-  (t/testing "with-env"
+  (t/testing "env"
     (i/with-env (i/env)
       (let [n (i/mote 0)]
         (t/is (= 0 @n))
@@ -35,28 +44,50 @@
       (i/connect! r)
       @(i/send n inc)
       (t/is (= 2 @r))))
-  (let [n (i/mote 0)
-        calls (atom 0)
-        r (i/reaction (fn []
-                        (swap! calls inc)
-                        (* @n 2)))]
-    @(i/send n inc)
-    (t/is (= i/disconnected @r))
-    (t/is (= 0 @calls))
+  (t/testing "simple"
+    (let [n (i/mote 0)
+          calls (atom 0)
+          r (i/reaction (fn []
+                          (swap! calls inc)
+                          (* @n 2)))]
+      @(i/send n inc)
+      (t/is (= i/disconnected @r))
+      (t/is (= 0 @calls))
 
-    (i/connect! r) ;; 1
-    (t/is (= 2 @r))
-    (t/is (= 1 @calls))
+      (i/connect! r) ;; 1
+      (t/is (= 2 @r))
+      (t/is (= 1 @calls))
 
-    @(i/send n inc) ;; 2
-    (t/is (= 4 @r))
-    (t/is (= 2 @calls))
+      @(i/send n inc) ;; 2
+      (t/is (= 4 @r))
+      (t/is (= 2 @calls))
 
-    (i/disconnect! r)
-    (t/is (not (i/connected? r)))
-   @(i/send n inc)
-    (t/is (= i/disconnected @r))
-    (t/is (= 2 @calls) "Doesn't fire r again after d/c")))
+      (i/disconnect! r)
+      (t/is (not (i/connected? r)))
+      @(i/send n inc)
+      (t/is (= i/disconnected @r))
+      (t/is (= 2 @calls) "Doesn't fire r again after d/c")))
+  (t/testing "propagates"
+    (let [n (i/mote 0)
+          a (i/reaction #(deref n))
+          b (i/reaction #(deref a))
+          c (i/reaction #(deref b))]
+      (t/are [con? r] (= con? (i/connected? r))
+        false a
+        false b
+        false c)
+
+      (i/connect! c)
+      (t/are [con? r] (= con? (i/connected? r))
+        true a
+        true b
+        true c)
+
+      (i/disconnect! c)
+      (t/are [con? r] (= con? (i/connected? r))
+        false a
+        false b
+        false c))))
 
 
 (t/deftest remove-stale
@@ -133,3 +164,37 @@
 
       (t/is (= 2 @n))
       (t/is (= 2 @r)))))
+
+
+(t/deftest cutoff
+  (t/testing "default"
+    (let [n (i/mote 0)
+          calls (atom {:ra 0 :rb 0})
+          ra (i/reaction (fn []
+                           (swap! calls update :ra inc)
+                           (* @n 2)))
+          rb (i/reaction (fn []
+                           (swap! calls update :rb inc)
+                           (inc @ra)))]
+      (i/connect! rb)
+      @(i/send n identity)
+
+      (t/is (= 1 (:ra @calls)))
+      (t/is (= 1 (:rb @calls)))))
+  (t/testing "custom"
+    (let [n (i/mote 0)
+          calls (atom {:ra 0 :rb 0})
+          ra (i/reaction
+              (fn []
+                (swap! calls update :ra inc)
+                (* @n 2))
+              ;; use custom transducer to cut off
+              (remove #(< % 3)))
+          rb (i/reaction (fn []
+                           (swap! calls update :rb inc)
+                           (inc @ra)))]
+      (i/connect! rb)
+
+      @(i/send n inc)
+      (t/is (= 2 (:ra @calls)))
+      (t/is (= 1 (:rb @calls))))))
