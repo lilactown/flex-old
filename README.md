@@ -132,3 +132,9 @@ Goals
 ;;  0 - high priority update
 ;;  1 - low priority update
 ```
+
+
+## Notes
+
+When batching, could we change independent sources at the same time? Need a way
+of queuing up multiple updates to the same source, as continuity is key.
