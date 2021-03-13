@@ -116,3 +116,20 @@
         (t/is (= [-2 -3] (i/with-env env
                            @end)))
         (t/is (= [2 3] @end))))))
+
+
+(t/deftest errors
+  (i/with-env (i/env)
+    (let [n (i/mote 0)
+          r (i/reaction #(if (< @n 3)
+                           @n
+                           (throw (ex-info "Too big!" {}))))]
+      (i/connect! r)
+      @(i/send n inc) ;; 1
+      @(i/send n inc) ;; 2
+      (t/is (= 2 @r))
+
+      (t/is (thrown? Exception @(i/send n inc))) ;; 3
+
+      (t/is (= 2 @n))
+      (t/is (= 2 @r)))))
