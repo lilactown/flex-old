@@ -28,7 +28,7 @@
 (def ^:dynamic *deps* nil)
 
 
-(def sentinel `unknown)
+(def unknown `unknown)
 
 
 (def disconnected `disconnected)
@@ -45,14 +45,14 @@
   [reaction rf f]
   (let [env *environment*
         id (-identify reaction)
-        v (env/current-val env id sentinel)
+        v (env/current-val env id unknown)
         {:keys [deps]} (env/relations env id)
 
         deps-state (atom #{})
         input (binding [*deps* deps-state]
              (f))
 
-        v' (if (= sentinel v)
+        v' (if (= unknown v)
              (rf input)
              (rf v input))
 
@@ -94,13 +94,13 @@
   clojure.lang.IDeref
   (deref [this]
     (let [child-reaction? (raise-deref! this)
-          v (env/current-val *environment* identity sentinel)]
+          v (env/current-val *environment* identity unknown)]
       (cond
-        (and (not child-reaction?) (= sentinel v))
+        (and (not child-reaction?) (= unknown v))
         disconnected
 
         ;; connected, not cached
-        (= sentinel v)
+        (= unknown v)
         (calculate! this reducer f)
 
         ;; connected, cached
@@ -119,7 +119,7 @@
     (gensym "incr_reaction")
     reaction-rf
     f))
-  ([f xform]
+  ([xform f]
    (->IncrementalReaction
     (gensym "incr_reaction")
     (xform reaction-rf)
@@ -183,8 +183,8 @@
   (deref [this]
     (raise-deref! this)
     (env/add-ref! *environment* identity this)
-    (let [v (env/current-val *environment* identity sentinel)]
-      (if (= sentinel v)
+    (let [v (env/current-val *environment* identity unknown)]
+      (if (= unknown v)
         (do (env/set-val! *environment* identity initial)
             initial)
         v))))
@@ -229,7 +229,7 @@
      (fn []
        (let [env' (env/branch env)
              id (-identify src)
-             v (env/current-val env' id sentinel)
+             v (env/current-val env' id unknown)
              v' (-receive src x)]
          (when-not (identical? v v')
            (env/set-val! env' id v')
@@ -240,22 +240,21 @@
            (when-let [[order reactions] (first heap)]
              (when-let [reaction (first reactions)]
                (let [rid (-identify reaction)
-                     ;; this should never be `sentinel`
-                     old (env/current-val env' rid sentinel)
+                     ;; this should never be `unknown`
+                     old (env/current-val env' rid unknown)
                      new (binding [*environment* env']
                            (-propagate! reaction src))
                      {:keys [reactions]} (env/relations env' rid)
-                     heap' (-> heap
-                               ;; remove reaction from the heap
-                               (update order disj reaction)
-                               ;; add new reactions to the heap
-                               (cond->
-                                (not= old new)
-                                 (into-heap
-                                  (map (fn [rid]
-                                         [(env/get-order env' rid)
-                                          (env/get-ref env' rid)])
-                                       reactions))))]
+                     heap' (cond-> heap
+                             ;; add new reactions to the heap
+                             true (update order disj reaction)
+
+                             (not= old new)
+                             (into-heap
+                              (map (fn [rid]
+                                     [(env/get-order env' rid)
+                                      (env/get-ref env' rid)])
+                                   reactions)))]
                  (recur
                   (if (zero? (count (get heap' order)))
                     ;; no reactions left in this order, dissoc it so that the

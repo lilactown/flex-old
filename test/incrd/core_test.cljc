@@ -113,7 +113,25 @@
     ;; this shouldn't fire `r`
     @(i/send n1 inc)
 
-    (t/is (= 5 @calls))))
+    (t/is (= 5 @calls)))
+
+  (t/testing "disconnects"
+    (let [n (i/mote 0)
+          ra (i/reaction #(* @n 2))
+          rb (i/reaction #(if (< @n 3)
+                            (inc @ra)
+                            42))]
+      (i/connect! rb)
+      (t/is (i/connected? ra))
+
+      @(i/send n inc) ;; 1
+      @(i/send n inc) ;; 2
+      (t/is (i/connected? ra))
+
+      @(i/send n inc)
+      (t/is (= 42 @rb))
+      (t/is (i/connected? rb))
+      (t/is (not (i/connected? ra))))))
 
 
 (t/deftest diamond
@@ -185,11 +203,11 @@
     (let [n (i/mote 0)
           calls (atom {:ra 0 :rb 0})
           ra (i/reaction
+              ;; use custom transducer to cut off
+              (remove #(< % 3))
               (fn []
                 (swap! calls update :ra inc)
-                (* @n 2))
-              ;; use custom transducer to cut off
-              (remove #(< % 3)))
+                (* @n 2)))
           rb (i/reaction (fn []
                            (swap! calls update :rb inc)
                            (inc @ra)))]
@@ -198,3 +216,42 @@
       @(i/send n inc)
       (t/is (= 2 (:ra @calls)))
       (t/is (= 1 (:rb @calls))))))
+
+
+(t/deftest transducers
+  (t/testing "single input & output"
+    (let [n (i/mote 0)
+          input #(deref n)
+          rmap (doto (i/reaction (map inc) input)
+                 i/connect!)
+          rfilter (doto (i/reaction (filter even?) input)
+                    i/connect!)
+          rremove (doto (i/reaction (remove even?) input)
+                    i/connect!)
+          ;; rkeep (i/reaction input )
+          ]
+
+
+      (t/is (= 0 @rmap))
+      (t/is (= 0 @rfilter))
+      (t/is (= 0 @rremove))
+
+      @(i/send n inc)
+      (t/is (= 2 @rmap))
+      (t/is (= 0 @rfilter))
+      (t/is (= 1 @rremove))
+
+      @(i/send n inc)
+      (t/is (= 3 @rmap))
+      (t/is (= 2 @rfilter))
+      (t/is (= 1 @rremove))
+
+      @(i/send n inc)
+      (t/is (= 4 @rmap))
+      (t/is (= 2 @rfilter))
+      (t/is (= 3 @rremove))
+
+      ))
+  #_(t/testing "collections"
+    (let [n (i/mote [0])
+          rcat (i/reaction input cat)])))
