@@ -40,16 +40,16 @@
 (t/deftest connection
   (t/testing "connection adds ref to the env"
     (let [n (i/input 0)
-          r (i/reaction #(* 2 @n))]
+          r (i/compute #(* 2 @n))]
       (i/connect! r)
       @(i/send n inc)
       (t/is (= 2 @r))))
   (t/testing "simple"
     (let [n (i/input 0)
           calls (atom 0)
-          r (i/reaction (fn []
-                          (swap! calls inc)
-                          (* @n 2)))]
+          r (i/compute (fn []
+                         (swap! calls inc)
+                         (* @n 2)))]
       @(i/send n inc)
       (t/is (= i/disconnected @r))
       (t/is (= 0 @calls))
@@ -69,9 +69,9 @@
       (t/is (= 2 @calls) "Doesn't fire r again after d/c")))
   (t/testing "propagates"
     (let [n (i/input 0)
-          a (i/reaction #(deref n))
-          b (i/reaction #(deref a))
-          c (i/reaction #(deref b))]
+          a (i/compute #(deref n))
+          b (i/compute #(deref a))
+          c (i/compute #(deref b))]
       (t/are [con? r] (= con? (i/connected? r))
         false a
         false b
@@ -94,11 +94,11 @@
   (let [n0 (i/input 0)
         n1 (i/input 0)
         calls (atom 0)
-        r (i/reaction (fn []
-                        (swap! calls inc)
-                        (if (< @n0 2)
-                          (+ @n0 @n1)
-                          (* 10 @n0))))]
+        r (i/compute (fn []
+                       (swap! calls inc)
+                       (if (< @n0 2)
+                         (+ @n0 @n1)
+                         (* 10 @n0))))]
     (i/connect! r) ;; 1
     (t/is (= 0 @r))
 
@@ -117,10 +117,10 @@
 
   (t/testing "disconnects"
     (let [n (i/input 0)
-          ra (i/reaction #(* @n 2))
-          rb (i/reaction #(if (< @n 3)
-                            (inc @ra)
-                            42))]
+          ra (i/compute #(* @n 2))
+          rb (i/compute #(if (< @n 3)
+                           (inc @ra)
+                           42))]
       (i/connect! rb)
       (t/is (i/connected? ra))
 
@@ -137,15 +137,15 @@
 (t/deftest diamond
   (let [n (i/input 0)
         runs (atom 0)
-        n*2 (i/reaction (fn []
-                          (swap! runs inc)
-                          (* @n 2)))
-        n*3 (i/reaction (fn []
-                          (swap! runs inc)
-                          (* @n 3)))
-        end (i/reaction (fn []
-                          (swap! runs inc)
-                          (vector @n*2 @n*3)))]
+        n*2 (i/compute (fn []
+                         (swap! runs inc)
+                         (* @n 2)))
+        n*3 (i/compute (fn []
+                         (swap! runs inc)
+                         (* @n 3)))
+        end (i/compute (fn []
+                         (swap! runs inc)
+                         (vector @n*2 @n*3)))]
     (i/connect! end)
     (t/is (= [0 0] @end))
     (t/is (= 3 @runs))
@@ -170,9 +170,9 @@
 (t/deftest errors
   (i/with-env (i/env)
     (let [n (i/input 0)
-          r (i/reaction #(if (< @n 3)
-                           @n
-                           (throw (ex-info "Too big!" {}))))]
+          r (i/compute #(if (< @n 3)
+                          @n
+                          (throw (ex-info "Too big!" {}))))]
       (i/connect! r)
       @(i/send n inc) ;; 1
       @(i/send n inc) ;; 2
@@ -188,12 +188,12 @@
   (t/testing "default"
     (let [n (i/input 0)
           calls (atom {:ra 0 :rb 0})
-          ra (i/reaction (fn []
-                           (swap! calls update :ra inc)
-                           (* @n 2)))
-          rb (i/reaction (fn []
-                           (swap! calls update :rb inc)
-                           (inc @ra)))]
+          ra (i/compute (fn []
+                          (swap! calls update :ra inc)
+                          (* @n 2)))
+          rb (i/compute (fn []
+                          (swap! calls update :rb inc)
+                          (inc @ra)))]
       (i/connect! rb)
       @(i/send n identity)
 
@@ -202,15 +202,15 @@
   (t/testing "custom"
     (let [n (i/input 0)
           calls (atom {:ra 0 :rb 0})
-          ra (i/reaction
+          ra (i/compute
               ;; use custom transducer to cut off
               (remove #(< % 3))
               (fn []
                 (swap! calls update :ra inc)
                 (* @n 2)))
-          rb (i/reaction (fn []
-                           (swap! calls update :rb inc)
-                           (inc @ra)))]
+          rb (i/compute (fn []
+                          (swap! calls update :rb inc)
+                          (inc @ra)))]
       (i/connect! rb)
 
       @(i/send n inc)
@@ -222,13 +222,13 @@
   (t/testing "single input & output"
     (let [n (i/input 0)
           input #(deref n)
-          rmap (doto (i/reaction (map inc) input)
+          rmap (doto (i/compute (map inc) input)
                  i/connect!)
-          rfilter (doto (i/reaction (filter even?) input)
+          rfilter (doto (i/compute (filter even?) input)
                     i/connect!)
-          rremove (doto (i/reaction (remove even?) input)
+          rremove (doto (i/compute (remove even?) input)
                     i/connect!)
-          ;; rkeep (i/reaction input )
+          ;; rkeep (i/compute input )
           ]
 
 
@@ -253,5 +253,5 @@
 
       ))
   #_(t/testing "collections"
-    (let [n (i/input [0])
-          rcat (i/reaction input cat)])))
+      (let [n (i/input [0])
+            rcat (i/compute input cat)])))

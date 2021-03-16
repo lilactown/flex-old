@@ -31,30 +31,30 @@
 
 
 (defn add-relation!
-  [env src-id reaction-id]
+  [env src-id computation-id]
   (swap! env
          (fn [env-map]
            (-> env-map
                (update-in [:graph :sources src-id]
-                          (fnil conj #{}) reaction-id)
-               (update-in [:graph :reactions reaction-id]
+                          (fnil conj #{}) computation-id)
+               (update-in [:graph :computations computation-id]
                           (fnil conj #{}) src-id)))))
 
 
 (defn remove-relation!
-  [env src-id reaction-id]
+  [env src-id computation-id]
   (swap! env
          (fn [env-map]
            (-> env-map
-               (update-in [:graph :sources src-id] disj reaction-id)
-               (update-in [:graph :reactions reaction-id] disj src-id)))))
+               (update-in [:graph :sources src-id] disj computation-id)
+               (update-in [:graph :computations computation-id] disj src-id)))))
 
 
 (defn relations
   [env id]
   (let [env-map @env]
-    {:reactions (get-in env-map [:graph :sources id] #{})
-     :deps (get-in env-map [:graph :reactions id] #{})}))
+    {:computations (get-in env-map [:graph :sources id] #{})
+     :deps (get-in env-map [:graph :computations id] #{})}))
 
 
 (defn add-ref!

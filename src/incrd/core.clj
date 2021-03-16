@@ -15,8 +15,8 @@
   (-identify [incr] "Returns a unique identifier for the incremental object"))
 
 
-(defprotocol IReaction
-  (-propagate! [reaction dep]))
+(defprotocol IComputation
+  (-propagate! [computation]))
 
 
 (def default-env (env/create-env))
@@ -42,9 +42,9 @@
 
 
 (defn- calculate!
-  [reaction rf f]
+  [computation rf f]
   (let [env *environment*
-        id (-identify reaction)
+        id (-identify computation)
         v (env/current-val env id none)
         {:keys [deps]} (env/relations env id)
 
@@ -58,7 +58,7 @@
 
         deps' (into #{} (map -identify @deps-state))]
     #_(prn :calculating id deps deps')
-    (env/add-ref! *environment* (-identify reaction) reaction)
+    (env/add-ref! *environment* (-identify computation) computation)
 
     ;; add new relations
     (doseq [dep deps']
@@ -77,14 +77,14 @@
       (env/set-order! env id order))
 
     ;; set value in context
-    (env/set-val! env (-identify reaction) v')
+    (env/set-val! env (-identify computation) v')
 
     v'))
 
 
-(deftype IncrementalReaction [identity reducer f]
-  IReaction
-  (-propagate! [this _dep]
+(deftype IncrementalComputation [identity reducer f]
+  IComputation
+  (-propagate! [this]
     ;; recalculate
     (calculate! this reducer f))
 
@@ -93,10 +93,10 @@
 
   clojure.lang.IDeref
   (deref [this]
-    (let [child-reaction? (raise-deref! this)
+    (let [child-computation? (raise-deref! this)
           v (env/current-val *environment* identity none)]
       (cond
-        (and (not child-reaction?) (= none v))
+        (and (not child-computation?) (= none v))
         disconnected
 
         ;; connected, not cached
@@ -108,43 +108,43 @@
         v))))
 
 
-(defn- reaction-rf
+(defn- computation-rf
   ([v] v)
   ([_ v] v))
 
 
-(defn reaction
+(defn compute
   ([f]
-   (->IncrementalReaction
-    (gensym "incr_reaction")
-    reaction-rf
+   (->IncrementalComputation
+    (gensym "incr_computation")
+    computation-rf
     f))
   ([xform f]
-   (->IncrementalReaction
-    (gensym "incr_reaction")
-    (xform reaction-rf)
+   (->IncrementalComputation
+    (gensym "incr_computation")
+    (xform computation-rf)
     f)))
 
 
 (defn connect!
   [r]
-  (-propagate! r nil))
+  (-propagate! r))
 
 
 (defn disconnect!
   [r]
   (let [env *environment*
         id (-identify r)
-        {:keys [deps reactions]} (env/relations env id)]
-    (when (seq reactions)
-      (throw (ex-info "Cannot disconnect reaction which has dependents"
-                      {:reactions reactions})))
+        {:keys [deps computations]} (env/relations env id)]
+    (when (seq computations)
+      (throw (ex-info "Cannot disconnect computation which has dependents"
+                      {:computations computations})))
 
     ;; remove all relations
     (doseq [dep deps]
       (env/remove-relation! env dep id))
 
-    ;; remove ref tracker to allow GC of reaction
+    ;; remove ref tracker to allow GC of computation
     (env/clear-ref! env id)
 
     ;; remove value
@@ -155,10 +155,10 @@
   [r]
   (let [env *environment*
         id (-identify r)
-        {:keys [deps reactions]} (env/relations env id)]
+        {:keys [deps computations]} (env/relations env id)]
     (boolean
      (or (seq deps)
-         (seq reactions)
+         (seq computations)
          (env/get-ref env id)
          (not= disconnected
                (env/current-val env id disconnected))))))
@@ -207,18 +207,18 @@
 
 
 (defn- into-heap
-  ([order+reactions]
-   (into-heap (sorted-map) order+reactions))
-  ([heap order+reactions]
+  ([order+computations]
+   (into-heap (sorted-map) order+computations))
+  ([heap order+computations]
    (reduce
-    (fn [m [order reaction]]
+    (fn [m [order computation]]
       (update
        m
        order
        (fnil conj #{})
-       reaction))
+       computation))
     heap
-    order+reactions)))
+    order+computations)))
 
 
 (defn send [src x]
@@ -236,28 +236,29 @@
            (loop [heap (into-heap (map (fn [rid]
                                          [(env/get-order env' rid)
                                           (env/get-ref env' rid)])
-                                       (:reactions (env/relations env' id))))]
-             (when-let [[order reactions] (first heap)]
-               (when-let [reaction (first reactions)]
-                 (let [rid (-identify reaction)
+                                       (:computations (env/relations env' id))))]
+             (when-let [[order computations] (first heap)]
+               (when-let [computation (first computations)]
+                 (let [rid (-identify computation)
                        ;; this should never be `none`
                        old (env/current-val env' rid none)
                        new (binding [*environment* env']
-                             (-propagate! reaction src))
-                       {:keys [reactions]} (env/relations env' rid)
+                             (-propagate! computation))
+                       {:keys [computations]} (env/relations env' rid)
                        heap' (cond-> heap
-                               ;; add new reactions to the heap
-                               true (update order disj reaction)
+                               ;; remove computation from heap
+                               true (update order disj computation)
 
-                               (not= old new)
+                               (or (= none new) (not= old new))
+                               ;; add new computations to the heap
                                (into-heap
                                 (map (fn [rid]
                                        [(env/get-order env' rid)
                                         (env/get-ref env' rid)])
-                                     reactions)))]
+                                     computations)))]
                    (recur
                     (if (zero? (count (get heap' order)))
-                      ;; no reactions left in this order, dissoc it so that the
+                      ;; no computations left in this order, dissoc it so that the
                       ;; lowest order is always first
                       (dissoc heap' order)
                       heap')))))))
