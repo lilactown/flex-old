@@ -28,7 +28,7 @@
 (def ^:dynamic *deps* nil)
 
 
-(def unknown `unknown)
+(def none `none)
 
 
 (def disconnected `disconnected)
@@ -45,14 +45,14 @@
   [reaction rf f]
   (let [env *environment*
         id (-identify reaction)
-        v (env/current-val env id unknown)
+        v (env/current-val env id none)
         {:keys [deps]} (env/relations env id)
 
         deps-state (atom #{})
         input (binding [*deps* deps-state]
-             (f))
+                (f))
 
-        v' (if (= unknown v)
+        v' (if (= none v)
              (rf input)
              (rf v input))
 
@@ -94,13 +94,13 @@
   clojure.lang.IDeref
   (deref [this]
     (let [child-reaction? (raise-deref! this)
-          v (env/current-val *environment* identity unknown)]
+          v (env/current-val *environment* identity none)]
       (cond
-        (and (not child-reaction?) (= unknown v))
+        (and (not child-reaction?) (= none v))
         disconnected
 
         ;; connected, not cached
-        (= unknown v)
+        (= none v)
         (calculate! this reducer f)
 
         ;; connected, cached
@@ -183,23 +183,23 @@
   (deref [this]
     (raise-deref! this)
     (env/add-ref! *environment* identity this)
-    (let [v (env/current-val *environment* identity unknown)]
-      (if (= unknown v)
+    (let [v (env/current-val *environment* identity none)]
+      (if (= none v)
         (do (env/set-val! *environment* identity initial)
             initial)
         v))))
 
 
-(defn- mote-reducer
+(defn- input-reducer
   [current f]
   (f current))
 
 
-(defn mote
+(defn input
   [initial]
   (->IncrementalSource
-   (gensym "incr_mote")
-   mote-reducer
+   (gensym "incr_input")
+   input-reducer
    initial))
 
 
@@ -229,38 +229,38 @@
      (fn []
        (let [env' (env/branch env)
              id (-identify src)
-             v (env/current-val env' id unknown)
+             v (env/current-val env' id none)
              v' (-receive src x)]
          (when-not (identical? v v')
            (env/set-val! env' id v')
            (loop [heap (into-heap (map (fn [rid]
+                                         [(env/get-order env' rid)
+                                          (env/get-ref env' rid)])
+                                       (:reactions (env/relations env' id))))]
+             (when-let [[order reactions] (first heap)]
+               (when-let [reaction (first reactions)]
+                 (let [rid (-identify reaction)
+                       ;; this should never be `none`
+                       old (env/current-val env' rid none)
+                       new (binding [*environment* env']
+                             (-propagate! reaction src))
+                       {:keys [reactions]} (env/relations env' rid)
+                       heap' (cond-> heap
+                               ;; add new reactions to the heap
+                               true (update order disj reaction)
+
+                               (not= old new)
+                               (into-heap
+                                (map (fn [rid]
                                        [(env/get-order env' rid)
                                         (env/get-ref env' rid)])
-                                     (:reactions (env/relations env' id))))]
-           (when-let [[order reactions] (first heap)]
-             (when-let [reaction (first reactions)]
-               (let [rid (-identify reaction)
-                     ;; this should never be `unknown`
-                     old (env/current-val env' rid unknown)
-                     new (binding [*environment* env']
-                           (-propagate! reaction src))
-                     {:keys [reactions]} (env/relations env' rid)
-                     heap' (cond-> heap
-                             ;; add new reactions to the heap
-                             true (update order disj reaction)
-
-                             (not= old new)
-                             (into-heap
-                              (map (fn [rid]
-                                     [(env/get-order env' rid)
-                                      (env/get-ref env' rid)])
-                                   reactions)))]
-                 (recur
-                  (if (zero? (count (get heap' order)))
-                    ;; no reactions left in this order, dissoc it so that the
-                    ;; lowest order is always first
-                    (dissoc heap' order)
-                    heap')))))))
+                                     reactions)))]
+                   (recur
+                    (if (zero? (count (get heap' order)))
+                      ;; no reactions left in this order, dissoc it so that the
+                      ;; lowest order is always first
+                      (dissoc heap' order)
+                      heap')))))))
 
          ;; another commit has happened between now and when we started
          ;; propagating; restart

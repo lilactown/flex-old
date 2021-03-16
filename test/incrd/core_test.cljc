@@ -14,20 +14,20 @@
 
 
 (t/deftest simple
-  (let [n (i/mote 0)]
+  (let [n (i/input 0)]
     (t/is (= 0 @n))
     @(i/send n inc)
     (t/is (= 1 @n)))
   (t/testing "env"
     (i/with-env (i/env)
-      (let [n (i/mote 0)]
+      (let [n (i/input 0)]
         (t/is (= 0 @n))
         @(i/send n inc)
         (t/is (= 1 @n))))))
 
 
 (t/deftest retry
-  (let [n (i/mote 0)
+  (let [n (i/input 0)
         tx (i/send n (fn [n]
                        (Thread/sleep 10)
                        4))]
@@ -39,13 +39,13 @@
 
 (t/deftest connection
   (t/testing "connection adds ref to the env"
-    (let [n (i/mote 0)
+    (let [n (i/input 0)
           r (i/reaction #(* 2 @n))]
       (i/connect! r)
       @(i/send n inc)
       (t/is (= 2 @r))))
   (t/testing "simple"
-    (let [n (i/mote 0)
+    (let [n (i/input 0)
           calls (atom 0)
           r (i/reaction (fn []
                           (swap! calls inc)
@@ -68,7 +68,7 @@
       (t/is (= i/disconnected @r))
       (t/is (= 2 @calls) "Doesn't fire r again after d/c")))
   (t/testing "propagates"
-    (let [n (i/mote 0)
+    (let [n (i/input 0)
           a (i/reaction #(deref n))
           b (i/reaction #(deref a))
           c (i/reaction #(deref b))]
@@ -91,8 +91,8 @@
 
 
 (t/deftest remove-stale
-  (let [n0 (i/mote 0)
-        n1 (i/mote 0)
+  (let [n0 (i/input 0)
+        n1 (i/input 0)
         calls (atom 0)
         r (i/reaction (fn []
                         (swap! calls inc)
@@ -116,7 +116,7 @@
     (t/is (= 5 @calls)))
 
   (t/testing "disconnects"
-    (let [n (i/mote 0)
+    (let [n (i/input 0)
           ra (i/reaction #(* @n 2))
           rb (i/reaction #(if (< @n 3)
                             (inc @ra)
@@ -135,7 +135,7 @@
 
 
 (t/deftest diamond
-  (let [n (i/mote 0)
+  (let [n (i/input 0)
         runs (atom 0)
         n*2 (i/reaction (fn []
                           (swap! runs inc)
@@ -169,7 +169,7 @@
 
 (t/deftest errors
   (i/with-env (i/env)
-    (let [n (i/mote 0)
+    (let [n (i/input 0)
           r (i/reaction #(if (< @n 3)
                            @n
                            (throw (ex-info "Too big!" {}))))]
@@ -186,7 +186,7 @@
 
 (t/deftest cutoff
   (t/testing "default"
-    (let [n (i/mote 0)
+    (let [n (i/input 0)
           calls (atom {:ra 0 :rb 0})
           ra (i/reaction (fn []
                            (swap! calls update :ra inc)
@@ -200,7 +200,7 @@
       (t/is (= 1 (:ra @calls)))
       (t/is (= 1 (:rb @calls)))))
   (t/testing "custom"
-    (let [n (i/mote 0)
+    (let [n (i/input 0)
           calls (atom {:ra 0 :rb 0})
           ra (i/reaction
               ;; use custom transducer to cut off
@@ -220,7 +220,7 @@
 
 (t/deftest transducers
   (t/testing "single input & output"
-    (let [n (i/mote 0)
+    (let [n (i/input 0)
           input #(deref n)
           rmap (doto (i/reaction (map inc) input)
                  i/connect!)
@@ -253,5 +253,5 @@
 
       ))
   #_(t/testing "collections"
-    (let [n (i/mote [0])
+    (let [n (i/input [0])
           rcat (i/reaction input cat)])))
