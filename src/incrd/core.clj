@@ -251,9 +251,7 @@
    (fn
      ([] init)
      ([current x]
-      (if (vector? x)
-        (apply (first x) current (rest x))
-        (x current))))))
+      (apply (first x) current (rest x))))))
 
 
 (def scheduler (scheduler/future-scheduler))
@@ -283,9 +281,7 @@
        (let [env' (env/branch env)
              id (-identify src)
              v (env/current-val env' id none)
-             v' (if (seq args)
-                  (-receive src (into [x] args))
-                  (-receive src x))]
+             v' (-receive src (into [x] args))]
          (when-not (identical? v v')
            (env/set-val! env' id v')
            (loop [heap (into-heap (map (fn [rid]

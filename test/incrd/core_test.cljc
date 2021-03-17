@@ -26,6 +26,20 @@
         (t/is (= 1 @n))))))
 
 
+#_(t/deftest source
+  (let [state (i/source
+               (fn state-reducer
+                 ([] (state-reducer nil :init))
+                 ([db event]
+                  (case event
+                    :inc (update db :count inc)
+                    :dec (update db :count dec)
+                    (:init :reset) {:count 0}))))]
+    (t/is (= {:count 0} @state))
+    @(i/send state :inc 'a)
+    (t/is (= {:count 1} @state))))
+
+
 (t/deftest retry
   (let [n (i/input 0)
         tx (i/send n (fn [n]
