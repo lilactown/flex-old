@@ -227,8 +227,10 @@
 
 
 (defn- input-reducer
-  [current f]
-  (f current))
+  [current x]
+  (if (vector? x)
+    (apply (first x) current (rest x))
+    (x current)))
 
 
 (defn input
@@ -257,7 +259,7 @@
     order+computations)))
 
 
-(defn send [src x]
+(defn send [src x & args]
   (let [env *environment*]
     (scheduler/schedule
      scheduler
@@ -266,7 +268,9 @@
        (let [env' (env/branch env)
              id (-identify src)
              v (env/current-val env' id none)
-             v' (-receive src x)]
+             v' (if (seq args)
+                  (-receive src (into [x] args))
+                  (-receive src x))]
          (when-not (identical? v v')
            (env/set-val! env' id v')
            (loop [heap (into-heap (map (fn [rid]

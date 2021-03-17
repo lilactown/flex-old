@@ -265,14 +265,42 @@
 
 
 (t/deftest defsig
-  (let [db (i/input {:name "Will"})]
+  (let [db (i/input {:name "Will"
+                     :counter 0})]
+
     (i/defsig greeting
       (str "Hello, " (:name @db)))
 
+    (i/defsig even-counter
+      {:cutoff? (fn [_ v] (odd? v))}
+      (:counter @db))
+
+    (def evens (i/collect [] even-counter))
+
     (t/is (= i/none @greeting))
+    (t/is (= i/none @even-counter))
 
     (i/connect! greeting)
-    (t/is (= "Hello, Will" @greeting))))
+    (i/connect! evens)
+    (t/is (= "Hello, Will" @greeting))
+    (t/is (= 0 @even-counter))
+    (t/is (= [0] @evens))
+
+    @(i/send db update :counter inc)
+
+    (t/is (= {:name "Will" :counter 1} @db))
+    (t/is (= "Hello, Will" @greeting))
+    (t/is (= 1 @even-counter))
+    (t/is (= [0] @evens))
+
+    @(i/send db update :counter inc)
+
+    (t/is (= {:name "Will" :counter 2} @db))
+    (t/is (= "Hello, Will" @greeting))
+    (t/is (= 2 @even-counter))
+    (t/is (= [0 2] @evens))
+
+    ))
 
 
 (t/deftest collect
