@@ -42,7 +42,7 @@
 
 
 (defn- calculate!
-  [computation rf f]
+  [computation rf f cutoff? initial]
   (let [env *environment*
         id (-identify computation)
         v (env/current-val env id none)
@@ -52,13 +52,9 @@
         input (binding [*deps* deps-state]
                 (f))
 
-        v' (if (= none v)
-             (rf input)
-             (rf v input))
-
+        v' (rf v input)
         deps' (into #{} (map -identify @deps-state))]
-    #_(prn :calculating id deps deps')
-    (env/add-ref! *environment* (-identify computation) computation)
+    (env/add-ref! *environment* id computation)
 
     ;; add new relations
     (doseq [dep deps']
@@ -77,16 +73,18 @@
       (env/set-order! env id order))
 
     ;; set value in context
-    (env/set-val! env (-identify computation) v')
+    (env/set-val! env id v')
 
-    v'))
+    [v' (if (and (some? cutoff?) (cutoff? v v'))
+          #{}
+          (:computations (env/relations env id)))]))
 
 
-(deftype IncrementalComputation [identity reducer f]
+(deftype IncrementalComputation [identity reducer f cutoff? initial]
   IComputation
   (-propagate! [this]
     ;; recalculate
-    (calculate! this reducer f))
+    (calculate! this reducer f cutoff? initial))
 
   IIncremental
   (-identify [this] identity)
@@ -96,12 +94,13 @@
     (let [child-computation? (raise-deref! this)
           v (env/current-val *environment* identity none)]
       (cond
-        (and (not child-computation?) (= none v))
-        disconnected
-
-        ;; connected, not cached
-        (= none v)
-        (calculate! this reducer f)
+        ;; connecting, not cached
+        (and child-computation? (= none v))
+        (let [[v] (calculate! this reducer f cutoff? initial)]
+          (if (= none v)
+            (throw (ex-info "Computation does not have a value" {::id identity
+                                                                 ::value none}))
+            v))
 
         ;; connected, cached
         :else
@@ -114,21 +113,20 @@
 
 
 (defn compute
-  ([f]
-   (->IncrementalComputation
-    (gensym "incr_computation")
-    computation-rf
-    f))
-  ([xform f]
-   (->IncrementalComputation
-    (gensym "incr_computation")
-    (xform computation-rf)
-    f)))
+  [f & {:keys [cutoff? initial]
+        :or {initial none
+             cutoff? nil}}]
+  (->IncrementalComputation
+   (gensym "incr_computation")
+   computation-rf
+   f
+   cutoff?
+   initial))
 
 
 (defn connect!
   [r]
-  (-propagate! r))
+  (first (-propagate! r)))
 
 
 (defn disconnect!
@@ -242,14 +240,13 @@
                  (let [rid (-identify computation)
                        ;; this should never be `none`
                        old (env/current-val env' rid none)
-                       new (binding [*environment* env']
-                             (-propagate! computation))
-                       {:keys [computations]} (env/relations env' rid)
+                       [new computations] (binding [*environment* env']
+                                            (-propagate! computation))
                        heap' (cond-> heap
                                ;; remove computation from heap
                                true (update order disj computation)
 
-                               (or (= none new) (not= old new))
+                               (not= old new)
                                ;; add new computations to the heap
                                (into-heap
                                 (map (fn [rid]
