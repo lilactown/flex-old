@@ -256,3 +256,43 @@
 
         1 odd-cutoff
         0 even))))
+
+
+(t/deftest collect
+  (let [n (i/input 0)
+        nums (i/collect [] #(conj % @n))]
+    (i/connect! nums)
+    (t/is (= [0] @nums))
+
+    @(i/send n inc)
+    @(i/send n inc)
+    @(i/send n inc)
+
+    (t/is (= [0 1 2 3] @nums)))
+  (let [n (i/input 0)
+        nums (i/collect [] #(conj % @n))]
+    (i/connect! nums)
+    (t/is (= [0] @nums))
+
+    @(i/send n inc)
+    @(i/send n inc)
+    @(i/send n inc)
+
+    (t/is (= [0 1 2 3] @nums)))
+  (t/testing "mixed with cutoff"
+    (let [n (i/input 0)
+          even (i/compute
+                #(deref n)
+                :cutoff? (fn [_ v]
+                           (odd? v)))
+          evens (i/collect [] #(conj % @even))]
+      (i/connect! evens)
+      (t/is (= [0] @evens))
+
+      @(i/send n inc)
+      @(i/send n inc)
+      @(i/send n inc)
+      @(i/send n inc)
+      @(i/send n inc)
+
+      (t/is (= [0 2 4] @evens)))))

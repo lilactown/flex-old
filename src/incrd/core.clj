@@ -48,12 +48,12 @@
   [computation rf f cutoff? initial]
   (let [env *environment*
         id (-identify computation)
-        v (env/current-val env id none)
+        v (env/current-val env id initial)
         {:keys [deps]} (env/relations env id)
 
         deps-state (atom #{})
         input (binding [*deps* deps-state]
-                (f))
+                (f v))
 
         v' (rf v input)
         deps' (into #{} (map -identify @deps-state))]
@@ -118,14 +118,22 @@
 
 
 (defn compute
-  [f & {:keys [cutoff? initial]
-        :or {initial none
-             cutoff? nil}}]
+  [f & {:keys [cutoff?]}]
+  (->IncrementalComputation
+   (gensym "incr_computation")
+   computation-rf
+   (fn [_] (f))
+   cutoff?
+   none))
+
+
+(defn collect
+  [initial f]
   (->IncrementalComputation
    (gensym "incr_computation")
    computation-rf
    f
-   cutoff?
+   nil
    initial))
 
 
