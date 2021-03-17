@@ -13,7 +13,7 @@
     (f)))
 
 
-(t/deftest simple
+(t/deftest input
   (let [n (i/input 0)]
     (t/is (= 0 @n))
     @(i/send n inc)
@@ -40,14 +40,20 @@
 (t/deftest connection
   (t/testing "connection adds ref to the env"
     (let [n (i/input 0)
-          c (i/compute #(* 2 @n))]
+          c (i/signal #(* 2 @n))]
+      (t/is (= i/none @c))
       (i/connect! c)
       @(i/send n inc)
       (t/is (= 2 @c))))
+  (t/testing "no refs"
+    (let [c (i/signal #(+ 1 2))]
+      (t/is (= i/none @c))
+      (i/connect! c)
+      (t/is (= 3 @c))))
   (t/testing "simple"
     (let [n (i/input 0)
           calls (atom 0)
-          c (i/compute (fn []
+          c (i/signal (fn []
                          (swap! calls inc)
                          (* @n 2)))]
       @(i/send n inc)
@@ -69,9 +75,9 @@
       (t/is (= 2 @calls) "Doesn't fire c again after d/c")))
   (t/testing "propagates"
     (let [n (i/input 0)
-          a (i/compute #(deref n))
-          b (i/compute #(deref a))
-          c (i/compute #(deref b))]
+          a (i/signal #(deref n))
+          b (i/signal #(deref a))
+          c (i/signal #(deref b))]
       (t/are [con? r] (= con? (i/connected? r))
         false a
         false b
@@ -94,7 +100,7 @@
   (let [n0 (i/input 0)
         n1 (i/input 0)
         calls (atom 0)
-        c (i/compute (fn []
+        c (i/signal (fn []
                        (swap! calls inc)
                        (if (< @n0 2)
                          (+ @n0 @n1)
@@ -117,8 +123,8 @@
 
   (t/testing "disconnects"
     (let [n (i/input 0)
-          ca (i/compute #(* @n 2))
-          cb (i/compute #(if (< @n 3)
+          ca (i/signal #(* @n 2))
+          cb (i/signal #(if (< @n 3)
                            (inc @ca)
                            42))]
       (i/connect! cb)
@@ -137,13 +143,13 @@
 (t/deftest diamond
   (let [n (i/input 0)
         runs (atom 0)
-        n*2 (i/compute (fn []
+        n*2 (i/signal (fn []
                          (swap! runs inc)
                          (* @n 2)))
-        n*3 (i/compute (fn []
+        n*3 (i/signal (fn []
                          (swap! runs inc)
                          (* @n 3)))
-        end (i/compute (fn []
+        end (i/signal (fn []
                          (swap! runs inc)
                          (vector @n*2 @n*3)))]
     (i/connect! end)
@@ -170,7 +176,7 @@
 (t/deftest errors
   (i/with-env (i/env)
     (let [n (i/input 0)
-          c (i/compute #(if (< @n 3)
+          c (i/signal #(if (< @n 3)
                           @n
                           (throw (ex-info "Too big!" {}))))]
       (i/connect! c)
@@ -188,10 +194,10 @@
   (t/testing "default - won't fire if ="
     (let [n (i/input 0)
           calls (atom {:ra 0 :rb 0})
-          ca (i/compute (fn []
+          ca (i/signal (fn []
                           (swap! calls update :ra inc)
                           (* @n 2)))
-          cb (i/compute (fn []
+          cb (i/signal (fn []
                           (swap! calls update :rb inc)
                           (inc @ca)))]
       (i/connect! cb)
@@ -205,24 +211,24 @@
                        :even 0
                        :even-cutoff 0
                        :odd 0})
-          even-cutoff (i/compute
+          even-cutoff (i/signal
+                       {:cutoff? (fn [old new]
+                                   (even? new))}
                        (fn []
                          (swap! calls update :even-cutoff inc)
-                         @n)
-                       :cutoff? (fn [old new]
-                                  (even? new)))
-          odd (i/compute
+                         @n))
+          odd (i/signal
                (fn []
                  (swap! calls update :odd inc)
                  @even-cutoff))
 
-          odd-cutoff (i/compute
+          odd-cutoff (i/signal
+                      {:cutoff? (fn [old new]
+                                  (odd? new))}
                       (fn []
                         (swap! calls update :odd-cutoff inc)
-                        @n)
-                      :cutoff? (fn [old new]
-                                 (odd? new)))
-          even (i/compute
+                        @n))
+          even (i/signal
                 (fn []
                   (swap! calls update :even inc)
                   @odd-cutoff))]
@@ -258,6 +264,17 @@
         0 even))))
 
 
+(t/deftest defsig
+  (let [db (i/input {:name "Will"})]
+    (i/defsig greeting
+      (str "Hello, " (:name @db)))
+
+    (t/is (= i/none @greeting))
+
+    (i/connect! greeting)
+    (t/is (= "Hello, Will" @greeting))))
+
+
 (t/deftest collect
   (let [n (i/input 0)
         nums (i/collect [] n)]
@@ -287,10 +304,10 @@
       (t/is (= [1 3 5] @even-n+1))))
   (t/testing "depends on computation"
     (let [n (i/input 0)
-          even (i/compute
-                #(deref n)
-                :cutoff? (fn [_ v]
-                           (odd? v)))
+          even (i/signal
+                {:cutoff? (fn [_ v]
+                            (odd? v))}
+                #(deref n))
           evens (i/collect [] even)]
       (i/connect! evens)
       (t/is (= [0] @evens))

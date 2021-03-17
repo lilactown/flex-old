@@ -73,7 +73,9 @@
     ;; set order to be the max of any child's order + 1
     (let [order (->> (for [dep deps']
                        (env/get-order env dep))
-                     (apply max)
+                     ;; 0 here for when a computation has no deps, we don't
+                     ;; call `max` with no args
+                     (apply max 0)
                      (inc))]
       (env/set-order! env id order))
 
@@ -113,18 +115,31 @@
 
 
 (defn- computation-rf
-  ([v] v)
-  ([_ v] v))
+  [_ v] v)
 
 
-(defn compute
-  [f & {:keys [id cutoff?]}]
-  (->IncrementalComputation
-   (or id (gensym "incr_computation"))
-   computation-rf
-   f
-   cutoff?
-   none))
+(defn signal
+  ([f]
+   (signal {} f))
+  ([{:keys [id cutoff?]} f]
+   (->IncrementalComputation
+    (or id (gensym "incr_computation"))
+    computation-rf
+    f
+    cutoff?
+    none)))
+
+
+(defmacro defsig
+  [sym & body]
+  (let [[opts body] (if (map? (first body))
+                      [(first body) (rest body)]
+                      [{} body])]
+    `(def ~sym
+       (signal
+        ~opts
+        (fn []
+          ~@body)))))
 
 
 (defn collect
@@ -182,9 +197,7 @@
     (boolean
      (or (seq deps)
          (seq computations)
-         (env/get-ref env id)
-         (not= disconnected
-               (env/current-val env id disconnected))))))
+         (env/get-ref env id)))))
 
 
 ;;
