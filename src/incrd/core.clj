@@ -45,10 +45,10 @@
 
 
 (defn- calculate!
-  [computation rf input-fn cutoff? initial]
+  [computation rf input-fn cutoff?]
   (let [env *environment*
         id (-identify computation)
-        v (env/current-val env id initial)
+        v (env/current-val env id none)
         {:keys [deps]} (env/relations env id)
 
         deps-state (atom #{})
@@ -56,7 +56,10 @@
                 (input-fn))
 
         ;; TODO can we optimize when `rf` returns a reduced?
-        v' (unreduced (rf v input))
+        v' (unreduced (rf (if (= none v)
+                            (rf)
+                            v)
+                          input))
         deps' (into #{} (map -identify @deps-state))]
     (env/add-ref! *environment* id computation)
 
@@ -88,11 +91,11 @@
           (:computations (env/relations env id)))]))
 
 
-(deftype IncrementalComputation [id reducer input-fn cutoff? initial]
+(deftype IncrementalComputation [id reducer input-fn cutoff?]
   IComputation
   (-propagate! [this]
     ;; recalculate
-    (calculate! this reducer input-fn cutoff? initial))
+    (calculate! this reducer input-fn cutoff?))
 
   IIncremental
   (-identify [this] id)
@@ -104,7 +107,7 @@
       (cond
         ;; connecting, not cached
         (and child-computation? (= none v))
-        (let [[v] (calculate! this reducer input-fn cutoff? initial)]
+        (let [[v] (calculate! this reducer input-fn cutoff?)]
           (if (= none v)
             (throw (ex-info "Computation does not have a value" {::id id
                                                                  ::value none}))
@@ -116,7 +119,8 @@
 
 
 (defn- computation-rf
-  [_ v] v)
+  ([] none)
+  ([_ v] v))
 
 
 (defn signal
@@ -127,8 +131,7 @@
     (or id (gensym "incr_computation"))
     computation-rf
     f
-    cutoff?
-    none)))
+    cutoff?)))
 
 
 (defmacro defsig
@@ -144,22 +147,22 @@
 
 
 (defn collect
-  ([initial c]
+  ([init c]
    (->IncrementalComputation
     (gensym "incr_collect")
-    (fn [coll c]
-      (conj coll c))
+    (fn
+      ([] init)
+      ([coll c] (conj coll c)))
     #(deref c)
-    nil
-    initial))
-  ([initial xform c]
+    nil))
+  ([init xform c]
    (->IncrementalComputation
     (gensym "incr_collect")
-    (xform (fn [coll c]
-             (conj coll c)))
+    (xform (fn
+             ([] init)
+             ([coll c] (conj coll c))))
     #(deref c)
-    nil
-    initial)))
+    nil)))
 
 
 (defn connect!
@@ -229,19 +232,24 @@
         v))))
 
 
-(defn- source
-  [rf]
-  (->IncrementalSource
-   (gensym "incr_src")
-   rf))
+(defn source
+  ([rf]
+   (->IncrementalSource
+    (gensym "incr_src")
+    rf))
+  ([rf init]
+   (source
+    (fn
+      ([] init)
+      ([current x] (rf current x))))))
 
 
 (defn input
-  [initial]
+  [init]
   (->IncrementalSource
    (gensym "incr_input")
    (fn
-     ([] initial)
+     ([] init)
      ([current x]
       (if (vector? x)
         (apply (first x) current (rest x))
