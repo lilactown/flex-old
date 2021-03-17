@@ -339,6 +339,17 @@
     @(i/send n inc)
 
     (t/is (= [0 1 2 3] @nums)))
+  (t/testing "collect a map"
+    (let [entry (i/input [:a 0])
+          map-collect (i/collect {} entry)]
+      (i/connect! map-collect)
+      (t/is (= {:a 0} @map-collect))
+
+      @(i/send entry (constantly [:b 1]))
+      @(i/send entry (constantly [:c 2]))
+      @(i/send entry (constantly [:a 3]))
+
+      (t/is (= {:a 3 :b 1 :c 2} @map-collect))))
   (t/testing "transducer"
     (let [n (i/input 0)
           even-n+1 (i/collect
