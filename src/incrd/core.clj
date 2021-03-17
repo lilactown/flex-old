@@ -55,7 +55,8 @@
         input (binding [*deps* deps-state]
                 (input-fn))
 
-        v' (rf v input)
+        ;; TODO can we optimize when `rf` returns a reduced?
+        v' (unreduced (rf v input))
         deps' (into #{} (map -identify @deps-state))]
     (env/add-ref! *environment* id computation)
 

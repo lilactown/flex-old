@@ -355,6 +355,19 @@
       @(i/send n inc)
 
       (t/is (= [1 3 5] @even-n+1))))
+  (t/testing "stateful transducer"
+    (let [n (i/input 0)
+          first-three-n (i/collect [] (take 3) n)]
+      (i/connect! first-three-n)
+      (t/is (= [0] @first-three-n))
+
+      @(i/send n inc)
+      @(i/send n inc)
+      @(i/send n inc)
+      @(i/send n inc)
+      @(i/send n inc)
+
+      (t/is (= [0 1 2] @first-three-n))))
   (t/testing "depends on computation"
     (let [n (i/input 0)
           even (i/signal
