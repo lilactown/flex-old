@@ -53,7 +53,7 @@
 
         deps-state (atom #{})
         input (binding [*deps* deps-state]
-                (f v))
+                (f))
 
         v' (rf v input)
         deps' (into #{} (map -identify @deps-state))]
@@ -122,19 +122,28 @@
   (->IncrementalComputation
    (gensym "incr_computation")
    computation-rf
-   (fn [_] (f))
+   f
    cutoff?
    none))
 
 
 (defn collect
-  [initial f]
-  (->IncrementalComputation
-   (gensym "incr_computation")
-   computation-rf
-   f
-   nil
-   initial))
+  ([initial c]
+   (->IncrementalComputation
+    (gensym "incr_computation")
+    (fn [coll c]
+      (conj coll c))
+    #(deref c)
+    nil
+    initial))
+  ([initial xform c]
+   (->IncrementalComputation
+    (gensym "incr_computation")
+    (xform (fn [coll c]
+             (conj coll c)))
+    #(deref c)
+    nil
+    initial)))
 
 
 (defn connect!

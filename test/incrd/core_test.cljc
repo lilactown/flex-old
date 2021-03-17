@@ -260,7 +260,7 @@
 
 (t/deftest collect
   (let [n (i/input 0)
-        nums (i/collect [] #(conj % @n))]
+        nums (i/collect [] n)]
     (i/connect! nums)
     (t/is (= [0] @nums))
 
@@ -269,23 +269,27 @@
     @(i/send n inc)
 
     (t/is (= [0 1 2 3] @nums)))
-  (let [n (i/input 0)
-        nums (i/collect [] #(conj % @n))]
-    (i/connect! nums)
-    (t/is (= [0] @nums))
+  (t/testing "transducer"
+    (let [n (i/input 0)
+          even-n+1 (i/collect
+                    []
+                    (comp (filter even?) (map inc))
+                    n)]
+      (i/connect! even-n+1)
+      (t/is (= [1] @even-n+1))
 
-    @(i/send n inc)
-    @(i/send n inc)
-    @(i/send n inc)
+      @(i/send n inc)
+      @(i/send n inc)
+      @(i/send n inc)
 
-    (t/is (= [0 1 2 3] @nums)))
-  (t/testing "mixed with cutoff"
+      (t/is (= [1 3] @even-n+1))))
+  (t/testing "depends on computation"
     (let [n (i/input 0)
           even (i/compute
                 #(deref n)
                 :cutoff? (fn [_ v]
                            (odd? v)))
-          evens (i/collect [] #(conj % @even))]
+          evens (i/collect [] even)]
       (i/connect! evens)
       (t/is (= [0] @evens))
 
