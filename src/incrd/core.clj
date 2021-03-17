@@ -206,12 +206,15 @@
 ;;
 
 
-(deftype IncrementalSource [id reducer initial]
+(deftype IncrementalSource [id reducer]
   ISource
   (-receive [this x]
-    (reducer
-     (env/current-val *environment* id initial)
-     x))
+    (let [v (env/current-val *environment* id none)]
+      (reducer
+       (if (= v none)
+         (reducer)
+         v)
+       x)))
 
   IIncremental
   (-identify [this] id)
@@ -222,24 +225,27 @@
     (env/add-ref! *environment* id this)
     (let [v (env/current-val *environment* id none)]
       (if (= none v)
-        (do (env/set-val! *environment* id initial)
-            initial)
+        (env/set-val! *environment* id (reducer))
         v))))
 
 
-(defn- input-reducer
-  [current x]
-  (if (vector? x)
-    (apply (first x) current (rest x))
-    (x current)))
+(defn- source
+  [rf]
+  (->IncrementalSource
+   (gensym "incr_src")
+   rf))
 
 
 (defn input
   [initial]
   (->IncrementalSource
    (gensym "incr_input")
-   input-reducer
-   initial))
+   (fn
+     ([] initial)
+     ([current x]
+      (if (vector? x)
+        (apply (first x) current (rest x))
+        (x current))))))
 
 
 (def scheduler (scheduler/future-scheduler))

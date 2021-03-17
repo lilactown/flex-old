@@ -22,7 +22,8 @@
 
 (defn set-val!
   [env id v]
-  (swap! env assoc-in [:values id] v))
+  (swap! env assoc-in [:values id] v)
+  v)
 
 
 (defn clear-val!
