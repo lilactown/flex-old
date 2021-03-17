@@ -41,6 +41,9 @@
     false))
 
 
+(declare disconnect!)
+
+
 (defn- calculate!
   [computation rf f cutoff? initial]
   (let [env *environment*
@@ -61,9 +64,11 @@
       (env/add-relation! env dep id))
 
     ;; remove stale relations
-    ;; TODO detect if this is last relation and should disconnect
     (doseq [dep (set/difference deps deps')]
-      (env/remove-relation! env dep id))
+      (env/remove-relation! env dep id)
+      (let [{:keys [computations]} (env/relations env dep)]
+        (when (empty? computations)
+          (disconnect! (env/get-ref env dep)))))
 
     ;; set order to be the max of any child's order + 1
     (let [order (->> (for [dep deps']
@@ -140,7 +145,10 @@
 
     ;; remove all relations
     (doseq [dep deps]
-      (env/remove-relation! env dep id))
+      (env/remove-relation! env dep id)
+      (let [{:keys [computations]} (env/relations env dep)]
+        (when (empty? computations)
+          (disconnect! (env/get-ref env dep)))))
 
     ;; remove ref tracker to allow GC of computation
     (env/clear-ref! env id)
