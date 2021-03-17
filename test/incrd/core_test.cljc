@@ -367,7 +367,35 @@
       @(i/send n inc)
       @(i/send n inc)
 
-      (t/is (= [0 1 2] @first-three-n))))
+      (t/is (= [0 1 2] @first-three-n)))
+    (let [n (i/input 0)
+          skip-3-n (i/collect [] (drop 3) n)]
+      (i/connect! skip-3-n)
+      (t/is (= [] @skip-3-n))
+
+      @(i/send n inc)
+      @(i/send n inc)
+      @(i/send n inc) ;; 3
+      @(i/send n inc) ;; 4
+      @(i/send n inc) ;; 5
+
+      (t/is (= [3 4 5] @skip-3-n)))
+    (let [n (i/input 0)
+          partitioner (i/collect [] (partition-by #(zero? (mod % 3))) n)]
+      (i/connect! partitioner)
+      (t/is (= '[] @partitioner))
+
+      @(i/send n inc) ;; 1 (false)
+      @(i/send n inc) ;; 2 (false)
+      @(i/send n inc) ;; 3 (true)
+      @(i/send n inc) ;; 4 (false)
+      @(i/send n inc) ;; 5 (false)
+      @(i/send n inc) ;; 6 (true)
+      @(i/send n inc) ;; 7
+      ;; the last one does not get collected, as partition-by waits for the
+      ;; partition fn to return a new value before collecting all of the subseqs
+
+      (t/is (= '[[0] [1 2] [3] [4 5] [6]] @partitioner))))
   (t/testing "depends on computation"
     (let [n (i/input 0)
           even (i/signal
