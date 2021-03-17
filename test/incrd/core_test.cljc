@@ -54,8 +54,8 @@
     (let [n (i/input 0)
           calls (atom 0)
           c (i/signal (fn []
-                         (swap! calls inc)
-                         (* @n 2)))]
+                        (swap! calls inc)
+                        (* @n 2)))]
       @(i/send n inc)
       (t/is (= i/none @c))
       (t/is (= 0 @calls))
@@ -101,10 +101,10 @@
         n1 (i/input 0)
         calls (atom 0)
         c (i/signal (fn []
-                       (swap! calls inc)
-                       (if (< @n0 2)
-                         (+ @n0 @n1)
-                         (* 10 @n0))))]
+                      (swap! calls inc)
+                      (if (< @n0 2)
+                        (+ @n0 @n1)
+                        (* 10 @n0))))]
     (i/connect! c) ;; 1
     (t/is (= 0 @c))
 
@@ -125,8 +125,8 @@
     (let [n (i/input 0)
           ca (i/signal #(* @n 2))
           cb (i/signal #(if (< @n 3)
-                           (inc @ca)
-                           42))]
+                          (inc @ca)
+                          42))]
       (i/connect! cb)
       (t/is (i/connected? ca))
 
@@ -144,14 +144,14 @@
   (let [n (i/input 0)
         runs (atom 0)
         n*2 (i/signal (fn []
-                         (swap! runs inc)
-                         (* @n 2)))
+                        (swap! runs inc)
+                        (* @n 2)))
         n*3 (i/signal (fn []
-                         (swap! runs inc)
-                         (* @n 3)))
+                        (swap! runs inc)
+                        (* @n 3)))
         end (i/signal (fn []
-                         (swap! runs inc)
-                         (vector @n*2 @n*3)))]
+                        (swap! runs inc)
+                        (vector @n*2 @n*3)))]
     (i/connect! end)
     (t/is (= [0 0] @end))
     (t/is (= 3 @runs))
@@ -177,8 +177,8 @@
   (i/with-env (i/env)
     (let [n (i/input 0)
           c (i/signal #(if (< @n 3)
-                          @n
-                          (throw (ex-info "Too big!" {}))))]
+                         @n
+                         (throw (ex-info "Too big!" {}))))]
       (i/connect! c)
       @(i/send n inc) ;; 1
       @(i/send n inc) ;; 2
@@ -195,11 +195,11 @@
     (let [n (i/input 0)
           calls (atom {:ra 0 :rb 0})
           ca (i/signal (fn []
-                          (swap! calls update :ra inc)
-                          (* @n 2)))
+                         (swap! calls update :ra inc)
+                         (* @n 2)))
           cb (i/signal (fn []
-                          (swap! calls update :rb inc)
-                          (inc @ca)))]
+                         (swap! calls update :rb inc)
+                         (inc @ca)))]
       (i/connect! cb)
       @(i/send n identity)
 
@@ -298,9 +298,7 @@
     (t/is (= {:name "Will" :counter 2} @db))
     (t/is (= "Hello, Will" @greeting))
     (t/is (= 2 @even-counter))
-    (t/is (= [0 2] @evens))
-
-    ))
+    (t/is (= [0 2] @evens))))
 
 
 (t/deftest collect
