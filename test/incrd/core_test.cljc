@@ -73,6 +73,33 @@
       @(i/send n inc)
       (t/is (= i/none @c))
       (t/is (= 2 @calls) "Doesn't fire c again after d/c")))
+  (t/testing "switch"
+    (let [n (i/input 0)
+          a (i/signal (constantly "a"))
+          b (i/signal (constantly "b"))
+          c (i/signal #(if (even? @n)
+                         @a
+                         @b))]
+      (i/connect! c)
+      (t/are [conn? x] (= conn? (i/connected? x))
+        true a
+        false b
+        true c)
+      (t/is (= "a" @c))
+
+      @(i/send n inc) ;; 1
+      (t/are [conn? x] (= conn? (i/connected? x))
+        false a
+        true b
+        true c)
+      (t/is (= "b" @c))
+
+      (i/disconnect! c)
+
+      (t/are [conn? x] (not (i/connected? x))
+        _ a
+        _ b
+        _ c)))
   (t/testing "propagates"
     (let [n (i/input 0)
           a (i/signal #(deref n))
