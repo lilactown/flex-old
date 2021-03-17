@@ -45,7 +45,7 @@
 
 
 (defn- calculate!
-  [computation rf f cutoff? initial]
+  [computation rf input-fn cutoff? initial]
   (let [env *environment*
         id (-identify computation)
         v (env/current-val env id initial)
@@ -53,7 +53,7 @@
 
         deps-state (atom #{})
         input (binding [*deps* deps-state]
-                (f))
+                (input-fn))
 
         v' (rf v input)
         deps' (into #{} (map -identify @deps-state))]
@@ -85,25 +85,25 @@
           (:computations (env/relations env id)))]))
 
 
-(deftype IncrementalComputation [identity reducer f cutoff? initial]
+(deftype IncrementalComputation [id reducer input-fn cutoff? initial]
   IComputation
   (-propagate! [this]
     ;; recalculate
-    (calculate! this reducer f cutoff? initial))
+    (calculate! this reducer input-fn cutoff? initial))
 
   IIncremental
-  (-identify [this] identity)
+  (-identify [this] id)
 
   clojure.lang.IDeref
   (deref [this]
     (let [child-computation? (raise-deref! this)
-          v (env/current-val *environment* identity none)]
+          v (env/current-val *environment* id none)]
       (cond
         ;; connecting, not cached
         (and child-computation? (= none v))
-        (let [[v] (calculate! this reducer f cutoff? initial)]
+        (let [[v] (calculate! this reducer input-fn cutoff? initial)]
           (if (= none v)
-            (throw (ex-info "Computation does not have a value" {::id identity
+            (throw (ex-info "Computation does not have a value" {::id id
                                                                  ::value none}))
             v))
 
@@ -118,9 +118,9 @@
 
 
 (defn compute
-  [f & {:keys [cutoff?]}]
+  [f & {:keys [id cutoff?]}]
   (->IncrementalComputation
-   (gensym "incr_computation")
+   (or id (gensym "incr_computation"))
    computation-rf
    f
    cutoff?
@@ -130,7 +130,7 @@
 (defn collect
   ([initial c]
    (->IncrementalComputation
-    (gensym "incr_computation")
+    (gensym "incr_collect")
     (fn [coll c]
       (conj coll c))
     #(deref c)
@@ -138,7 +138,7 @@
     initial))
   ([initial xform c]
    (->IncrementalComputation
-    (gensym "incr_computation")
+    (gensym "incr_collect")
     (xform (fn [coll c]
              (conj coll c)))
     #(deref c)
@@ -192,23 +192,23 @@
 ;;
 
 
-(deftype IncrementalSource [identity reducer initial]
+(deftype IncrementalSource [id reducer initial]
   ISource
   (-receive [this x]
     (reducer
-     (env/current-val *environment* identity initial)
+     (env/current-val *environment* id initial)
      x))
 
   IIncremental
-  (-identify [this] identity)
+  (-identify [this] id)
 
   clojure.lang.IDeref
   (deref [this]
     (raise-deref! this)
-    (env/add-ref! *environment* identity this)
-    (let [v (env/current-val *environment* identity none)]
+    (env/add-ref! *environment* id this)
+    (let [v (env/current-val *environment* id none)]
       (if (= none v)
-        (do (env/set-val! *environment* identity initial)
+        (do (env/set-val! *environment* id initial)
             initial)
         v))))
 

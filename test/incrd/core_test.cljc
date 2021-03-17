@@ -281,8 +281,10 @@
       @(i/send n inc)
       @(i/send n inc)
       @(i/send n inc)
+      @(i/send n inc)
+      @(i/send n inc)
 
-      (t/is (= [1 3] @even-n+1))))
+      (t/is (= [1 3 5] @even-n+1))))
   (t/testing "depends on computation"
     (let [n (i/input 0)
           even (i/compute
