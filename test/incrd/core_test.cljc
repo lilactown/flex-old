@@ -206,26 +206,26 @@
                        :even-cutoff 0
                        :odd 0})
           even-cutoff (i/compute
-                 (fn []
-                   (swap! calls update :even-cutoff inc)
-                   @n)
-                 :cutoff? (fn [old new]
-                            (even? new)))
+                       (fn []
+                         (swap! calls update :even-cutoff inc)
+                         @n)
+                       :cutoff? (fn [old new]
+                                  (even? new)))
           odd (i/compute
-                (fn []
-                  (swap! calls update :odd inc)
-                  @even-cutoff))
+               (fn []
+                 (swap! calls update :odd inc)
+                 @even-cutoff))
 
           odd-cutoff (i/compute
-                 (fn []
-                   (swap! calls update :odd-cutoff inc)
-                   @n)
-                 :cutoff? (fn [old new]
-                            (odd? new)))
+                      (fn []
+                        (swap! calls update :odd-cutoff inc)
+                        @n)
+                      :cutoff? (fn [old new]
+                                 (odd? new)))
           even (i/compute
-                 (fn []
-                   (swap! calls update :even inc)
-                   @odd-cutoff))]
+                (fn []
+                  (swap! calls update :even inc)
+                  @odd-cutoff))]
       (i/connect! even)
       (i/connect! odd)
       (t/are [expected key] (= expected (get @calls key))
