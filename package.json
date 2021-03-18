@@ -1,0 +1,17 @@
+{
+  "name": "flex",
+  "version": "1.0.0",
+  "description": "Goals * An interface for incremental data computation graphs * Cross platform: Clojure and ClojureScript * Work can be scheduled and prioritized * Work can be split across frames (time slicing) * Work can be split across client and server * Work can be split across multiple nodes   * How do we share context? * Graphs can be isolated    * Why?   * Would it share scheduler? Potential to be too greedy if not coordinated together",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ws": "^7.4.4"
+  }
+}

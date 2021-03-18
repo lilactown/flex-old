@@ -1,2 +1,5 @@
 /.nrepl-port
 /.cpcache/
+/out/
+/node_modules/
+/.cljs_node_repl/
