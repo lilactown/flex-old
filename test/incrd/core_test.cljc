@@ -445,3 +445,49 @@
       @(i/send n inc)
 
       (t/is (= [0 2 4] @evens)))))
+
+
+(defn spy
+  ([] (let [state (atom [])]
+        [state (fn [x] (swap! state conj x))]))
+  ([f] (let [state (atom [])]
+         [state (fn [x] (swap! state conj x) (f x))])))
+
+
+(t/deftest watch
+  (t/testing "sources"
+    (let [n (i/input 0)
+          [calls call] (spy)
+          dispose! (i/watch! n call)]
+      @(i/send n inc)
+      @(i/send n inc)
+      (t/is (= [1 2] @calls))
+      (dispose!)
+      @(i/send n inc)
+      @(i/send n inc)
+      (t/is (= [1 2] @calls))))
+  (t/testing "signals"
+    (let [n (i/input 0)
+          [acalls awatch] (spy)
+          [bcalls bwatch] (spy)
+          [ccalls cwatch] (spy)
+          a (i/signal #(* 2 @n))
+          b (i/signal #(if (even? @n)
+                         "even"
+                         "odd"))
+          c (i/signal {:cutoff? (fn [_ v] (even? v))} #(deref n))
+          adispose! (i/watch! a awatch)
+          bdispose! (i/watch! b bwatch)
+          cdispose! (i/watch! c cwatch)]
+      @(i/send n inc)
+      @(i/send n inc)
+      (t/is (= [2 4] @acalls))
+      (t/is (= ["odd" "even"] @bcalls))
+      (t/is (= [1] @ccalls) "cutoff works")
+
+      (adispose!)
+      @(i/send n inc)
+      @(i/send n inc)
+      (t/is (= [2 4] @acalls) "dispose works (no change)") ;; no change
+      (t/is (= ["odd" "even" "odd" "even"] @bcalls))
+      (t/is (= [1 3] @ccalls)))))

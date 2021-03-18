@@ -86,9 +86,7 @@
     ;; set value in context
     (env/set-val! env id v')
 
-    [v' (if (and (some? cutoff?) (cutoff? v v'))
-          #{}
-          (:computations (env/relations env id)))]))
+    [v' (and (some? cutoff?) (cutoff? v v'))]))
 
 
 (deftype IncrementalComputation [id reducer input-fn cutoff?]
@@ -149,7 +147,7 @@
 (defn collect
   ([init c]
    (->IncrementalComputation
-    (gensym "incr_collect")
+    (gensym (str (-identify c) "_collect"))
     (fn
       ([] init)
       ([coll c] (conj coll c)))
@@ -157,7 +155,7 @@
     nil))
   ([init xform c]
    (->IncrementalComputation
-    (gensym "incr_collect")
+    (gensym (str (-identify c) "_collect"))
     (xform (fn
              ([] init)
              ([coll c] (conj coll c))))
@@ -191,6 +189,28 @@
 
     ;; remove value
     (env/clear-val! env id)))
+
+
+(defn watch!
+  [c f]
+  ;; lexically bind *environment* so that we properly close over it in
+  ;; the dispose fn
+  (let [env *environment*
+        id (-identify c)
+        computation? (satisfies? IComputation c)]
+    (env/add-watcher! env (-identify c) f)
+    (when computation?
+      (connect! c))
+    (fn dispose! []
+      (env/remove-watcher! env (-identify c) f)
+      ;; TODO don't use exceptions for this!!
+      (if computation?
+        (try
+          (disconnect! c)
+          true
+          (catch Exception e
+            false))
+        true))))
 
 
 (defn connected?
@@ -234,24 +254,20 @@
 
 (defn source
   ([rf]
-   (->IncrementalSource
-    (gensym "incr_src")
-    rf))
-  ([rf init]
-   (source
-    (fn
-      ([] init)
-      ([current x] (rf current x))))))
+   (source {:id (gensym "incr_src")} rf))
+  ([{:keys [id]} rf]
+   (->IncrementalSource id rf)))
 
 
 (defn input
-  [init]
-  (->IncrementalSource
-   (gensym "incr_input")
-   (fn
-     ([] init)
-     ([current x]
-      (apply (first x) current (rest x))))))
+  ([init] (input {:id (gensym "incr_input")} init))
+  ([{:keys [id]} init]
+   (->IncrementalSource
+    id
+    (fn
+      ([] init)
+      ([current x]
+       (apply (first x) current (rest x)))))))
 
 
 (def scheduler (scheduler/future-scheduler))
@@ -281,42 +297,52 @@
        (let [env' (env/branch env)
              id (-identify src)
              v (env/current-val env' id none)
-             v' (-receive src (into [x] args))]
-         (when-not (identical? v v')
-           (env/set-val! env' id v')
-           (loop [heap (into-heap (map (fn [rid]
-                                         [(env/get-order env' rid)
-                                          (env/get-ref env' rid)])
-                                       (:computations (env/relations env' id))))]
-             (when-let [[order computations] (first heap)]
-               (when-let [computation (first computations)]
-                 (let [rid (-identify computation)
-                       ;; this should never be `none`
-                       old (env/current-val env' rid none)
-                       [new computations] (binding [*environment* env']
+             v' (-receive src (into [x] args))
+             {:keys [computations watches]} (env/relations env' id)
+             fx (when-not (identical? v v')
+                  (env/set-val! env' id v')
+                  (loop [heap (into-heap
+                               (map
+                                (fn [rid]
+                                  [(env/get-order env' rid)
+                                   (env/get-ref env' rid)])
+                                computations))
+                         fx (into #{} (map (fn [f] #(f v'))) watches)]
+                    (if-let [[order computations] (first heap)]
+                      (let [computation (first computations)
+                            rid (-identify computation)
+                            ;; this should never be `none`
+                            v (env/current-val env' rid none)
+                            [v' cutoff?] (binding [*environment* env']
                                             (-propagate! computation))
-                       heap' (cond-> heap
-                               ;; remove computation from heap
-                               true (update order disj computation)
+                            {:keys [computations watches]} (env/relations env' rid)
+                            heap' (cond-> heap
+                                    ;; remove computation from heap
+                                    true (update order disj computation)
 
-                               (not= old new)
-                               ;; add new computations to the heap
-                               (into-heap
-                                (map (fn [rid]
-                                       [(env/get-order env' rid)
-                                        (env/get-ref env' rid)])
-                                     computations)))]
-                   (recur
-                    (if (zero? (count (get heap' order)))
-                      ;; no computations left in this order, dissoc it so that the
-                      ;; lowest order is always first
-                      (dissoc heap' order)
-                      heap')))))))
-
-         ;; another commit has happened between now and when we started
-         ;; propagating; restart
+                                    (and (not cutoff?) (not= v v'))
+                                    ;; add new computations to the heap
+                                    (into-heap
+                                     (map (fn [rid]
+                                            [(env/get-order env' rid)
+                                             (env/get-ref env' rid)])
+                                          computations)))]
+                        (recur
+                         (if (zero? (count (get heap' order)))
+                           ;; no computations left in this order, dissoc it so that the
+                           ;; lowest order is always first
+                           (dissoc heap' order)
+                           heap')
+                         (if cutoff?
+                           fx
+                           (into fx (map (fn [f] #(f v'))) watches))))
+                      fx)))]
          (if (env/is-parent? *environment* env')
-           (env/commit! *environment* env')
+           (do (env/commit! *environment* env')
+               (doseq [f fx]
+                 (f)))
+           ;; another commit has happened between now and when we started
+           ;; propagating; restart
            (do (prn :retry)
                (recur))))))))
 

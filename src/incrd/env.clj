@@ -51,11 +51,22 @@
                (update-in [:graph :computations computation-id] disj src-id)))))
 
 
+(defn add-watcher!
+  [env id f]
+  (swap! env update-in [:graph :watches id] (fnil conj #{}) f))
+
+
+(defn remove-watcher!
+  [env id f]
+  (swap! env update-in [:graph :watches id] disj f))
+
+
 (defn relations
   [env id]
   (let [env-map @env]
     {:computations (get-in env-map [:graph :sources id] #{})
-     :deps (get-in env-map [:graph :computations id] #{})}))
+     :deps (get-in env-map [:graph :computations id] #{})
+     :watches (get-in env-map [:graph :watches id] #{})}))
 
 
 (defn add-ref!
