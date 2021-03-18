@@ -3,7 +3,7 @@
    [clojure.set :as set]
    [flex.env :as env]
    [flex.scheduler :as scheduler])
-  (:refer-clojure :exclude [send]))
+  #?(:clj (:refer-clojure :exclude [send])))
 
 
 
@@ -16,7 +16,8 @@
 
 
 (defprotocol IComputation
-  (-propagate! [computation]))
+  (-propagate! [computation]
+    "Compute and return new value and whether to update dependents"))
 
 
 (def default-env (env/create-env))
@@ -270,7 +271,8 @@
        (apply (first x) current (rest x)))))))
 
 
-(def scheduler (scheduler/future-scheduler))
+(def scheduler #?(:clj (scheduler/future-scheduler)
+                  :cljs (scheduler/promise-scheduler)))
 
 
 (defn- into-heap
