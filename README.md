@@ -1,4 +1,4 @@
-# incrd
+# flex
 
 Goals
 * An interface for incremental data computation graphs
@@ -14,30 +14,30 @@ Goals
 
 ## Features
 
-- [x] Simple containers `mote`
-- [x] Easy reactive computations `reaction`
+- [x] Simple containers `input`
+- [x] Easy reactive computations `compute`
 - [x] Topological sort
 - [ ] Cold watches `add-watch`
-- [ ] Hot watches (see Incremental)
+- [x] Hot watches (see Incremental)
 - [ ] Internal side effects `defer`
 - [ ] Task queue
 - [ ] Serialize to disk
   - [ ] Stable names
 - [ ] Batching/transactions
-- [ ] Error handling
-- [ ] Garbage collection `dispose!`
+- [x] Error handling
+- [x] Garbage collection `dispose!`
 - [ ] Monadic API
-- [ ] Complex containers `source`
+- [x] Complex containers `source`
 
 
 ## API scratch
 
 ```clojure
-(require '[incrd.core :as incrd :refer [mote send with-env reaction watch! dispose! defer]])
+(require '[flex.core :as flex :refer [input send with-env signal watch! dispose! defer]])
 
 ;; -- changing state
 
-(def count (mote 0))
+(def count (input 0))
 
 @count ;; => 0
 
@@ -67,8 +67,8 @@ Goals
 ;; -- dependent values
 
 (def count*2
-  (reaction
-    (* @count 2))) ;; => #<Reaction>
+  (signal
+    (* @count 2))) ;; => #<Signal>
 
 @count*2 ;; => 2
 
@@ -109,20 +109,20 @@ Goals
 
 ;; side effect after each successful update
 (def count*4+prn
-  (reaction
+  (signal
     (let [count*4 (* @count*2 2)]
       (defer #(prn count*4))
-      count*4))) ;; => #<Reaction>
+      count*4))) ;; => #<Signal>
 
 
 ;; -- priority
 
 (def watcher (watch! count prn))
 
-;; updates are by default incrd/priority-low
+;; updates are by default flex/priority-low
 (send count inc)
 
-(with-priority incrd/priority-high
+(with-priority flex/priority-high
   (send count (constantly 0)))
 
 (prn @count)
@@ -136,5 +136,25 @@ Goals
 
 ## Notes
 
-When batching, could we change independent sources at the same time? Need a way
+Q: When batching, could we change independent sources at the same time? Need a way
 of queuing up multiple updates to the same source, as continuity is key.
+
+
+---
+
+
+Q: When using remove/filter/drop/etc., should we wait to propagate until a known
+value is assigned? What does being "connected?" mean then?
+
+
+Q: When connecting, should we schedule a computation to be run instead of doing it
+synchronously? Perhaps a `touch` fn could force the computation if necessary.
+
+A: All computations should have an initial value. `signal`s compute their
+initial value but a `:cutoff?` function can prevent future updates; `collect`
+can specify an initial value and skip updates by returning the previous value
+in the reducer.
+
+--- 
+
+`window` transducer that provides a sliding window collection of values
