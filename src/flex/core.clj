@@ -1,8 +1,8 @@
-(ns incrd.core
+(ns flex.core
   (:require
    [clojure.set :as set]
-   [incrd.env :as env]
-   [incrd.scheduler :as scheduler])
+   [flex.env :as env]
+   [flex.scheduler :as scheduler])
   (:refer-clojure :exclude [send]))
 
 
