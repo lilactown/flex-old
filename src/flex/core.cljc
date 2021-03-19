@@ -3,7 +3,8 @@
    [clojure.set :as set]
    [flex.env :as env]
    [flex.scheduler :as scheduler])
-  #?(:clj (:refer-clojure :exclude [send])))
+  #?(:clj (:refer-clojure :exclude [send])
+     :cljs (:require-macros [flex.core])))
 
 
 
@@ -99,8 +100,10 @@
   IIncremental
   (-identify [this] id)
 
-  clojure.lang.IDeref
-  (deref [this]
+  #?(:clj clojure.lang.IDeref
+     :cljs IDeref)
+  (#?(:clj deref
+      :cljs -deref) [this]
     (let [child-computation? (raise-deref! this)
           v (env/current-val *environment* id none)]
       (cond
@@ -209,7 +212,8 @@
         (try
           (disconnect! c)
           true
-          (catch Exception e
+          (catch #?(:clj Exception
+                    :cljs js/Error) e
             false))
         true))))
 
@@ -243,8 +247,10 @@
   IIncremental
   (-identify [this] id)
 
-  clojure.lang.IDeref
-  (deref [this]
+  #?(:clj clojure.lang.IDeref
+     :cljs IDeref)
+  (#?(:clj deref
+      :cljs -deref) [this]
     (raise-deref! this)
     (env/add-ref! *environment* id this)
     (let [v (env/current-val *environment* id none)]
@@ -291,7 +297,8 @@
 
 
 (defn send [src x & args]
-  (let [env *environment*]
+  (let [env *environment*
+        retries (atom 0)]
     (scheduler/schedule
      scheduler
      nil
@@ -345,8 +352,10 @@
                  (f)))
            ;; another commit has happened between now and when we started
            ;; propagating; restart
-           (do (prn :retry)
-               (recur))))))))
+           (when (< @retries 10)
+             (swap! retries inc)
+             (prn :retry)
+             (recur))))))))
 
 
 ;;

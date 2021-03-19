@@ -15,6 +15,6 @@
         (.then f))))
 
 
-(defn promise-scheudler
+(defn promise-scheduler
   []
   (->ExtremelyDumbPromiseScheduler))
