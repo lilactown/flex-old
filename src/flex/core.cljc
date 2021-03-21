@@ -302,7 +302,7 @@
     (scheduler/schedule
      scheduler
      nil
-     (fn []
+     (fn [_]
        (let [env' (env/branch env)
              id (-identify src)
              v (env/current-val env' id none)
