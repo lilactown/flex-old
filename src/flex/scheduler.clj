@@ -11,16 +11,12 @@
     (future
       (Thread/sleep 10)
       (loop [task task
-             recur-args nil
-             micro-tasks ()]
-        (let [[next-tasks recur-args] (task recur-args)]
+             recur-args nil]
+        (let [recur-args (apply task recur-args)]
           ;; TODO bring the heap?
           (cond
             (some? recur-args)
-            (recur task recur-args (into micro-tasks next-tasks))
-
-            (seq micro-tasks)
-            (recur (first micro-tasks) nil (rest micro-tasks))
+            (recur task recur-args)
 
             :else
             nil)))))

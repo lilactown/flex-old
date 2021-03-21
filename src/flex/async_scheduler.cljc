@@ -24,30 +24,27 @@
   (let [task-chan (a/chan 10)
         complete-chan (a/chan)]
     (a/go-loop [task (a/<! task-chan)
-                recur-args nil
-                micro-tasks ()]
-      (let [[next-tasks recur-args] (task recur-args)]
-        ;; TODO bring the heap?
+                recur-args nil]
+      (let [[recur-args] (apply task recur-args)]
         (cond
           (some? recur-args)
-          (recur task recur-args (into micro-tasks next-tasks))
-
-          (seq micro-tasks)
-          (recur (first micro-tasks) nil (rest micro-tasks))
+          (recur task recur-args)
 
           :else
           (do
             (a/put! complete-chan :done)
-            (recur (a/<! task-chan) nil ())))))
+            (recur (a/<! task-chan) nil)))))
     (reify
       f.s/IScheduler
       (schedule [this _ f]
         (let [p (promise)]
           (a/put! task-chan f)
-          (a/take! complete-chan (fn [_ ] (deliver p nil))))))))
+          (a/take! complete-chan (fn [_ ] (deliver p nil)))
+          p)))))
 
 
 (comment
   (def s (async-scheduler))
 
-  (f.s/schedule s nil (fn [_] (prn "hi"))))
+  (do @(f.s/schedule s nil (fn [_] (prn "hi")))
+      :done))

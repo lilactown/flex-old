@@ -302,7 +302,66 @@
     (scheduler/schedule
      scheduler
      nil
-     (fn [_]
+     (fn stabilize!
+       ([]
+        (let [env' (env/branch env)
+              id (-identify src)
+              v (env/current-val env' id none)
+              v' (-receive src (into [x] args))
+              {:keys [computations watches]} (env/relations env' id)
+              heap (into-heap
+                    (map
+                     (fn [cid]
+                       [(env/get-order env' cid)
+                        (env/get-ref env' cid)])
+                     computations))
+              fx (into #{} (map (fn [f] #(f v'))) watches)]
+          (when-not (identical? v v')
+            (env/set-val! env' id v')
+            [env' heap fx])))
+       ([env' heap fx]
+        (if-let [[order computations] (first heap)]
+          (let [computation (first computations)
+                rid (-identify computation)
+                ;; this should never be `none`
+                v (env/current-val env' rid none)
+                [v' cutoff?] (binding [*environment* env']
+                               (-propagate! computation))
+                {:keys [computations watches]} (env/relations env' rid)
+                heap' (cond-> heap
+                        ;; remove computation from heap
+                        true (update order disj computation)
+
+                        (and (not cutoff?) (not= v v'))
+                        ;; add new computations to the heap
+                        (into-heap
+                         (map (fn [rid]
+                                [(env/get-order env' rid)
+                                 (env/get-ref env' rid)])
+                              computations)))]
+            (vector
+             env'
+             (if (zero? (count (get heap' order)))
+               ;; no computations left in this order, dissoc it so that the
+               ;; lowest order is always first
+               (dissoc heap' order)
+               heap')
+             (if cutoff?
+               fx
+               (into fx (map (fn [f] #(f v'))) watches))))
+          ;; wrap it up
+          (if (env/is-parent? *environment* env')
+            (do (env/commit! *environment* env')
+                (doseq [f fx]
+                  (f))
+                nil)
+            ;; another commit has happened between now and when we started
+            ;; propagating; restart
+            (when (< @retries 10)
+              (swap! retries inc)
+              (prn :retry)
+              (stabilize!))))))
+     #_(fn [_]
        (let [env' (env/branch env)
              id (-identify src)
              v (env/current-val env' id none)
