@@ -58,16 +58,16 @@
 ;;
 ;; TODO promise-scheduler runs things in FIFO, cannot sleep
 ;;
-#?(:clj (t/deftest retry
-          (async-test
-           (let [n (f/input 0)
-                 tx (f/send n (fn [n]
-                                (Thread/sleep 10)
-                                4))]
-             (<< (f/send n inc))
-             (t/is (= 1 @n))
-             (<< tx)
-             (t/is (= 4 @n))))))
+;; #?(:clj (t/deftest retry
+;;           (async-test
+;;            (let [n (f/input 0)
+;;                  tx (f/send n (fn [n]
+;;                                 (Thread/sleep 10)
+;;                                 4))]
+;;              (<< (f/send n inc))
+;;              (t/is (= 1 @n))
+;;              (<< tx)
+;;              (t/is (= 4 @n))))))
 
 
 (t/deftest connection

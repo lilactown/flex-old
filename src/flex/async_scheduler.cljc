@@ -21,30 +21,42 @@
 
 (defn async-scheduler
   []
-  (let [task-chan (a/chan 10)
-        complete-chan (a/chan)]
+  (let [task-chan (a/chan 10) ;; ??? more ???
+        complete-chan (a/chan)
+        error-chan (a/chan)]
+    ;; main event loop which handles tasks
     (a/go-loop [task (a/<! task-chan)
                 recur-args nil]
-      (let [[recur-args] (apply task recur-args)]
-        (cond
-          (some? recur-args)
-          (recur task recur-args)
+      (let [res (try
+                  (let [recur-args (apply task recur-args)]
+                    (cond
+                      (some? recur-args)
+                      [:recur task recur-args]
 
-          :else
-          (do
-            (a/put! complete-chan :done)
-            (recur (a/<! task-chan) nil)))))
+                      :else
+                      [:done]))
+                  (catch Exception e
+                    [:error e]))]
+        (case (first res)
+          :recur (let [[_ task recur-args] res]
+                   (recur task recur-args))
+          :done (do (a/put! complete-chan :done)
+                    (recur (a/<! task-chan) nil))
+          :error (do (a/put! error-chan (second res))
+                     (recur (a/<! task-chan) nil)))))
     (reify
       f.s/IScheduler
       (schedule [this _ f]
         (let [p (promise)]
           (a/put! task-chan f)
-          (a/take! complete-chan (fn [_ ] (deliver p nil)))
+          (a/go
+            (a/alts! [error-chan complete-chan])
+            (deliver p nil))
           p)))))
 
 
 (comment
   (def s (async-scheduler))
 
-  (do @(f.s/schedule s nil (fn [_] (prn "hi")))
+  (do @(f.s/schedule s nil (fn [] (prn "hi")))
       :done))

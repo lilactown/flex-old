@@ -2,7 +2,8 @@
   (:require
    [clojure.set :as set]
    [flex.env :as env]
-   [flex.scheduler :as scheduler])
+   [flex.scheduler :as scheduler]
+   [flex.async-scheduler :as async-scheduler])
   #?(:clj (:refer-clojure :exclude [send])
      :cljs (:require-macros [flex.core])))
 
@@ -277,7 +278,7 @@
        (apply (first x) current (rest x)))))))
 
 
-(def scheduler #?(:clj (scheduler/future-scheduler)
+(def scheduler #?(:clj (async-scheduler/async-scheduler)
                   :cljs (scheduler/promise-scheduler)))
 
 
@@ -307,7 +308,8 @@
         (let [env' (env/branch env)
               id (-identify src)
               v (env/current-val env' id none)
-              v' (-receive src (into [x] args))
+              v' (binding [*environment* env']
+                   (-receive src (into [x] args)))
               {:keys [computations watches]} (env/relations env' id)
               heap (into-heap
                     (map
@@ -350,8 +352,8 @@
                fx
                (into fx (map (fn [f] #(f v'))) watches))))
           ;; wrap it up
-          (if (env/is-parent? *environment* env')
-            (do (env/commit! *environment* env')
+          (if (env/is-parent? env env')
+            (do (env/commit! env env')
                 (doseq [f fx]
                   (f))
                 nil)

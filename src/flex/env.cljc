@@ -12,7 +12,7 @@
 (defn create-env
   "Creates a new environment"
   []
-  (atom initial-env))
+  (atom (assoc initial-env :version (gensym "env"))))
 
 
 (defn current-val
