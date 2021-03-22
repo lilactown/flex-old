@@ -35,7 +35,7 @@
 
                       :else
                       [:done]))
-                  (catch Exception e
+                  (catch #?(:clj Exception :cljs js/Error) e
                     [:error e]))]
         (case (first res)
           :recur (let [[_ task recur-args] res]
@@ -47,12 +47,18 @@
     (reify
       f.s/IScheduler
       (schedule [this _ f]
-        (let [p (promise)]
-          (a/put! task-chan f)
-          (a/go
-            (a/alts! [error-chan complete-chan])
-            (deliver p nil))
-          p)))))
+        #?(:clj (let [p (promise)]
+                  (a/put! task-chan f)
+                  (a/go
+                    (a/alts! [error-chan complete-chan])
+                    (deliver p nil))
+                  p)
+           :cljs (js/Promise.
+                  (fn [res rej]
+                    (a/put! task-chan f)
+                    (a/go
+                      (a/alts! [error-chan complete-chan])
+                      (res nil)))))))))
 
 
 (comment

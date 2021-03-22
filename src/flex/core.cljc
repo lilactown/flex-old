@@ -278,8 +278,7 @@
        (apply (first x) current (rest x)))))))
 
 
-(def scheduler #?(:clj (async-scheduler/async-scheduler)
-                  :cljs (scheduler/promise-scheduler)))
+(def scheduler (async-scheduler/async-scheduler))
 
 
 (defn- into-heap
