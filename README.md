@@ -1,7 +1,5 @@
 # flex
 
-# flex
-
 > Weird flex, but ok
 
 flex is a library for creating dynamic, incremental dataflow programs in
