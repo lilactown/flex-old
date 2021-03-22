@@ -40,6 +40,8 @@ Work in progress. DO NOT EAT!
 (def counter*2 (f/signal #(* 2 counter)))
 (def dispose! (f/watch! counter*2 prn))
 
+@counter*2 ;; => 2
+
 @(f/send counter inc)
 ;; Prints: 4
 
