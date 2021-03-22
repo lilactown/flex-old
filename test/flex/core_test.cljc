@@ -248,7 +248,9 @@
        (<< (f/send n inc)) ;; 2
        (t/is (= 2 @c))
 
-       (t/is (thrown? #?(:clj Exception :cljs js/Error) (<< (f/send n inc)))) ;; 3
+       (t/is (thrown?
+              #?(:clj Exception :cljs js/Error)
+              (<< (f/send n inc)))) ;; 3
 
        (t/is (= 2 @n))
        (t/is (= 2 @c))))))
