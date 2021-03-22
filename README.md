@@ -34,7 +34,7 @@ Work in progress. DO NOT EAT!
 
 (def counter (f/input 0))
 
-@(f/send counter inc) ;; => nil
+@(f/send counter inc) ;; blocks until re-calculation based on message is completed (JVM only)
 @counter ;; => 1
 
 (def counter*2 (f/signal #(* 2 counter)))
