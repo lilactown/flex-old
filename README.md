@@ -4,7 +4,7 @@
 
 > Weird flex, but ok
 
-flex is a library for creating dynamic, incremental computations in 
+flex is a library for creating dynamic, incremental dataflow programs in
 Clojure(Script).
 
 Work in progress. DO NOT EAT!
