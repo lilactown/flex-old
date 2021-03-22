@@ -1,9 +1,9 @@
 # flex
 
-> Weird flex, but ok
-
-flex is a library for creating dynamic, incremental dataflow programs in
+Flex is a library for creating dynamic, incremental dataflow programs in
 Clojure(Script).
+
+> Weird flex, but ok
 
 Work in progress. DO NOT EAT!
 
