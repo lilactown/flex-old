@@ -1,8 +1,8 @@
-(require '[incrd.core :as incrd :refer [mote send reaction with-env env]])
+(require '[flex.core :as f :refer [input send signal with-env env]])
 
 ;; -- changing state
 
-(def count (mote 0))
+(def count (input 0))
 
 @count
 
@@ -25,7 +25,9 @@
 
 
 (def count*2
-  (reaction #(* 2 @count)))
+  (signal #(* 2 @count)))
+
+(f/connect! count*2)
 
 @count*2
 
@@ -37,10 +39,12 @@
 
 
 (def count*3
-  (reaction #(* 3 @count)))
+  (signal #(* 3 @count)))
 
 (def end
-  (reaction #(vector @count*2 @count*3)))
+  (signal #(vector @count*2 @count*3)))
+
+(f/connect! end)
 
 @count*3
 
@@ -50,8 +54,11 @@
 (def my-env (env))
 
 (with-env my-env
+  (f/connect! end)
   @end)
 
 (with-env my-env
   (send count inc)
   (send count inc))
+
+(with-env my-env @end)
