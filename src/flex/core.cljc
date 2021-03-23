@@ -76,14 +76,13 @@
         {:keys [deps]} (env/relations env id)
 
         deps-state (atom #{})
-        input (binding [*deps* deps-state]
-                (input-fn))
-
         ;; TODO can we optimize when `rf` returns a reduced?
-        v' (unreduced (rf (if (= none v)
-                            (rf)
-                            v)
-                          input))
+        v' (binding [*deps* deps-state]
+             (unreduced (rf (if (= none v)
+                              (rf)
+                              v)
+                            (input-fn))))
+
         deps' (into #{} (map -identify @deps-state))]
     (env/add-ref! *environment* id computation)
 
