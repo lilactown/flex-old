@@ -22,10 +22,31 @@
     "Compute and return new value and whether to update dependents"))
 
 
-(def default-env (env/create-env))
+;;
+;; -- environments
+;;
+
+(defn env [& {:keys [scheduler]
+              :or {scheduler (async-scheduler/async-scheduler)}}]
+  (env/create-env
+   {:scheduler scheduler}))
+
+
+(defmacro with-env
+  [env & body]
+  `(binding [*environment* ~env]
+     ~@body))
+
+
+(def default-env (env))
 
 
 (def ^:dynamic *environment* default-env)
+
+
+;;
+;; -- computations
+;;
 
 
 (def ^:dynamic *deps* nil)
@@ -231,7 +252,7 @@
 
 
 ;;
-;; -- Sources
+;; -- sources
 ;;
 
 
@@ -278,9 +299,6 @@
        (apply (first x) current (rest x)))))))
 
 
-(def scheduler (async-scheduler/async-scheduler))
-
-
 (defn- into-heap
   ([order+computations]
    (into-heap (sorted-map) order+computations))
@@ -298,6 +316,7 @@
 
 (defn send [src x & args]
   (let [env *environment*
+        {:keys [scheduler]} @env
         retries (atom 0)]
     (scheduler/schedule
      scheduler
@@ -362,17 +381,3 @@
               (swap! retries inc)
               (prn :retry)
               (stabilize!)))))))))
-
-
-;;
-;; -- environments
-;;
-
-(defn env []
-  (env/create-env))
-
-
-(defmacro with-env
-  [env & body]
-  `(binding [*environment* ~env]
-     ~@body))

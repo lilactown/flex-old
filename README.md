@@ -17,7 +17,7 @@ Work in progress. DO NOT EAT!
 * [ ] Memoized signal factories can be created via `signal-fn` and `defsig-fn`
 * [x] Computations are done in topological order, avoiding glitches
 * [x] Error handling: bails recomputing on error and does not update any variables
-* [ ] Error handling: communicate error to sender (I broke it)
+* [x] Error handling: communicate error to sender
 * [x] Reified environments avoid global state
 * [x] Asynchronous scheduling of computations, splitting work
 * [ ] Parallelizing computations of the same height
@@ -26,6 +26,7 @@ Work in progress. DO NOT EAT!
 * [x] Changes can be observed and trigger effects on change
 * [ ] Computations can trigger side effects in the body
 * [ ] Benchmarks
+* [ ] Tracing
 
 ## API
 

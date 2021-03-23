@@ -19,6 +19,50 @@
   )
 
 
+#?(:clj
+   (defn- promise?!
+     "A promise that throws if an error is delivered."
+     []
+     (let [d (java.util.concurrent.CountDownLatch. 1)
+           v (atom d)]
+       (reify
+         clojure.lang.IDeref
+         (deref [_]
+           (.await d)
+           (let [v* @v]
+             (if (instance? Throwable v*)
+               (throw v*)
+               v*)))
+         clojure.lang.IBlockingDeref
+         (deref
+             [_ timeout-ms timeout-val]
+           (if (.await d timeout-ms java.util.concurrent.TimeUnit/MILLISECONDS)
+             (let [v* @v]
+               (if (instance? Throwable v*)
+                 (throw v*)
+                 v*))
+             timeout-val))
+         clojure.lang.IPending
+         (isRealized [this]
+           (zero? (.getCount d)))
+         clojure.lang.IFn
+         (invoke
+             [this x]
+           (when (and (pos? (.getCount d))
+                      (compare-and-set! v d x))
+             (.countDown d)
+             this))))))
+
+
+(defn- promise*
+  [f]
+  #?(:clj (let [p (promise?!)]
+            (f (fn resolve [x] (p x))
+               (fn reject [e] (p e)))
+            p)
+     :cljs (js/Promise. f)))
+
+
 (defn async-scheduler
   []
   (let [task-chan (a/chan 10) ;; ??? more ???
@@ -47,18 +91,14 @@
     (reify
       f.s/IScheduler
       (schedule [this _ f]
-        #?(:clj (let [p (promise)]
-                  (a/put! task-chan f)
-                  (a/go
-                    (a/alts! [error-chan complete-chan])
-                    (deliver p nil))
-                  p)
-           :cljs (js/Promise.
-                  (fn [res rej]
-                    (a/put! task-chan f)
-                    (a/go
-                      (a/alts! [error-chan complete-chan])
-                      (res nil)))))))))
+        (promise*
+         (fn [resolve reject]
+           (a/put! task-chan f)
+           (a/go
+             (let [[res c] (a/alts! [error-chan complete-chan])]
+               (if (= c error-chan)
+                 (reject res)
+                 (resolve res))))))))))
 
 
 (comment

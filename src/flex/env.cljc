@@ -4,6 +4,7 @@
 
 (def ^:private initial-env
   {:version (gensym "env")
+   :scheduler nil
    :values {}
    :graph {}
    :refs {}})
@@ -11,8 +12,10 @@
 
 (defn create-env
   "Creates a new environment"
-  []
-  (atom (assoc initial-env :version (gensym "env"))))
+  [{:keys [scheduler]}]
+  (atom (assoc initial-env
+               :version (gensym "env")
+               :scheduler scheduler)))
 
 
 (defn current-val
@@ -111,9 +114,14 @@
 
 (defn clear-env!
   [env]
-  (reset! env initial-env))
+  (swap! env
+         (fn [env]
+           (merge
+            initial-env
+            (select-keys env [:version :scheduler])))))
 
 
 (defn empty?
   [env]
-  (= initial-env @env))
+  (= (dissoc initial-env :version :scheduler)
+     (dissoc @env :version :scheduler)))

@@ -3,7 +3,8 @@
    [clojure.test :as t :include-macros true]
    [flex.test-macros :refer [async-test <<]]
    [flex.core :as f]
-   [flex.env :as env]))
+   [flex.env :as env]
+   [flex.scheduler :as sched]))
 
 
 #?(:clj (t/use-fixtures :each
@@ -513,3 +514,19 @@
        (t/is (= [2 4] @acalls) "dispose works (no change)") ;; no change
        (t/is (= ["odd" "even" "odd" "even"] @bcalls))
        (t/is (= [1 3] @ccalls))))))
+
+
+(t/deftest custom-scheduler
+  (async-test
+   (let [env (f/env :scheduler (sched/extremely-dumb-scheduler))
+         n (f/input 0)
+         n*2 (f/signal #(* 2 @n))
+         [calls call] (spy)]
+     (f/with-env env
+       (f/watch! n*2 call)
+
+       (<< (f/send n + 2))
+
+       (t/is (= 2 @n))
+       (t/is (= 4 @n*2))
+       (t/is (= [4] @calls))))))
