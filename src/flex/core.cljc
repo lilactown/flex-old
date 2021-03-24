@@ -83,7 +83,7 @@
                           (input-fn v))))
 
         deps' (into #{} (map -identify @deps-state))]
-    (env/add-ref! *environment* id computation)
+    (env/add-ref! env id computation)
 
     ;; add new relations
     (doseq [dep deps']
