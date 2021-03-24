@@ -19,87 +19,119 @@
 
 
 (defn current-val
-  [env id initial]
-  (-> @env :values (get id initial)))
+  [env* id initial]
+  (-> @env* :values (get id initial)))
+
+
+(defn set-val
+  [env id v]
+  (assoc-in env [:values id] v))
 
 
 (defn set-val!
-  [env id v]
-  (swap! env assoc-in [:values id] v)
+  [env* id v]
+  (swap! env* set-val id v)
   v)
 
 
 (defn clear-val!
-  [env id]
-  (swap! env update :values dissoc id))
+  [env* id]
+  (swap! env* update :values dissoc id))
+
+
+
+(defn add-relation
+  [env src-id computation-id]
+  (-> env
+      (update-in [:graph :sources src-id]
+                 (fnil conj #{}) computation-id)
+      (update-in [:graph :computations computation-id]
+                 (fnil conj #{}) src-id)))
 
 
 (defn add-relation!
+  [env* src-id computation-id]
+  (swap! env* add-relation src-id computation-id))
+
+
+(defn remove-relation
   [env src-id computation-id]
-  (swap! env
-         (fn [env-map]
-           (-> env-map
-               (update-in [:graph :sources src-id]
-                          (fnil conj #{}) computation-id)
-               (update-in [:graph :computations computation-id]
-                          (fnil conj #{}) src-id)))))
+  (-> env
+      (update-in [:graph :sources src-id] disj computation-id)
+      (update-in [:graph :computations computation-id] disj src-id)))
 
 
 (defn remove-relation!
-  [env src-id computation-id]
-  (swap! env
-         (fn [env-map]
-           (-> env-map
-               (update-in [:graph :sources src-id] disj computation-id)
-               (update-in [:graph :computations computation-id] disj src-id)))))
+  [env* src-id computation-id]
+  (swap! env* remove-relation src-id computation-id))
 
 
 (defn add-watcher!
-  [env id f]
-  (swap! env update-in [:graph :watches id] (fnil conj #{}) f))
+  [env* id f]
+  (swap! env* update-in [:graph :watches id] (fnil conj #{}) f))
 
 
 (defn remove-watcher!
-  [env id f]
-  (swap! env update-in [:graph :watches id] disj f))
+  [env* id f]
+  (swap! env* update-in [:graph :watches id] disj f))
 
 
 (defn relations
   [env id]
-  (let [env-map @env]
-    {:computations (get-in env-map [:graph :sources id] #{})
-     :deps (get-in env-map [:graph :computations id] #{})
-     :watches (get-in env-map [:graph :watches id] #{})}))
+  {:computations (get-in env [:graph :sources id] #{})
+   :deps (get-in env [:graph :computations id] #{})
+   :watches (get-in env [:graph :watches id] #{})})
+
+
+(defn relations!
+  [env* id]
+  (let [env @env*]
+    (relations env id)))
+
+
+(defn add-ref
+  [env id o]
+  (assoc-in env [:refs id :obj] o))
 
 
 (defn add-ref!
-  [env id o]
-  (swap! env assoc-in [:refs id :obj] o))
+  [env* id o]
+  (swap! env* add-ref id o))
 
 
 (defn get-ref
+  [env* id]
+  (get-in @env* [:refs id :obj]))
+
+
+(defn clear-ref
   [env id]
-  (get-in @env [:refs id :obj]))
+  (env update :refs dissoc id))
 
 
 (defn clear-ref!
-  [env id]
-  (swap! env update :refs dissoc id))
+  [env* id]
+  (swap! env* clear-ref id))
+
+
+(defn set-order
+  [env id order]
+  (assoc-in env [:refs id :order] order))
 
 
 (defn set-order!
-  [env id order]
-  (swap! env assoc-in [:refs id :order] order))
+  [env* id order]
+  (swap! env* set-order id order))
 
 
 (defn get-order
-  [env id]
-  (get-in @env [:refs id :order] 0))
+  [env* id]
+  (get-in @env* [:refs id :order] 0))
 
 
 (defn branch
-  [env]
-  (atom (assoc @env :parent @env)))
+  [env*]
+  (atom (assoc @env* :parent @env*)))
 
 
 (defn is-parent?
