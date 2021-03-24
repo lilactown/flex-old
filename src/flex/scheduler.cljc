@@ -30,6 +30,15 @@
                  (.then #(run-task! task))))))
 
 
+(deftype SynchronousSchedulerDoNotUse []
+  IScheduler
+  (schedule [this _ task]
+    (run-task! task)
+    (reify
+      clojure.lang.IDeref
+      (deref [_] nil))))
+
+
 (defn extremely-dumb-scheduler
   []
   (->ExtremelyDumbScheduler))
