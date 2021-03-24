@@ -69,7 +69,7 @@
 
 
 (defn- calculate!
-  [computation rf input-fn cutoff?]
+  [computation input-fn cutoff?]
   (let [env *environment*
         id (-identify computation)
         v (env/current-val env id none)
@@ -78,10 +78,9 @@
         deps-state (atom #{})
         ;; TODO can we optimize when `rf` returns a reduced?
         v' (binding [*deps* deps-state]
-             (unreduced (rf (if (= none v)
-                              (rf)
-                              v)
-                            (input-fn))))
+             (unreduced (if (= none v)
+                          (input-fn)
+                          (input-fn v))))
 
         deps' (into #{} (map -identify @deps-state))]
     (env/add-ref! *environment* id computation)
@@ -112,11 +111,11 @@
     [v' (and (some? cutoff?) (cutoff? v v'))]))
 
 
-(deftype IncrementalComputation [id reducer input-fn cutoff?]
+(deftype IncrementalComputation [id input-fn cutoff?]
   IComputation
   (-propagate! [this]
     ;; recalculate
-    (calculate! this reducer input-fn cutoff?))
+    (calculate! this input-fn cutoff?))
 
   IIncremental
   (-identify [this] id)
@@ -130,7 +129,7 @@
       (cond
         ;; connecting, not cached
         (and child-computation? (= none v))
-        (let [[v] (calculate! this reducer input-fn cutoff?)]
+        (let [[v] (calculate! this input-fn cutoff?)]
           (if (= none v)
             (throw (ex-info "Computation does not have a value" {::id id
                                                                  ::value none}))
@@ -146,14 +145,22 @@
   ([_ v] v))
 
 
-(defn signal
+(defn create-signal
   ([f]
-   (signal {} f))
+   (create-signal {} f))
   ([{:keys [id cutoff?]} f]
    (->IncrementalComputation
     (or id (gensym "incr_computation"))
-    computation-rf
-    f
+    (fn input-fn
+      ([] (f))
+      ([_prev] (f)))
+    cutoff?))
+  ([{:keys [id cutoff?]} f0 f1]
+   (->IncrementalComputation
+    (or id (gensym "incr_computation"))
+    (fn input-fn
+      ([] (f0))
+      ([prev] (f1 prev)))
     cutoff?)))
 
 
@@ -174,17 +181,16 @@
    (->IncrementalComputation
     (gensym (str (-identify c) "_collect"))
     (fn
-      ([] init)
-      ([coll c] (conj coll c)))
-    #(deref c)
+      ([] (conj init (deref c)))
+      ([coll] (conj coll (deref c))))
     nil))
   ([init xform c]
    (->IncrementalComputation
     (gensym (str (-identify c) "_collect"))
-    (xform (fn
-             ([] init)
-             ([coll c] (conj coll c))))
-    #(deref c)
+    (let [rf (xform (fn rf [coll x] (conj coll x)))]
+      (fn input-fn
+        ([] (rf init @c))
+        ([prev] (rf prev @c))))
     nil)))
 
 
