@@ -38,7 +38,7 @@ Work in progress. DO NOT EAT!
 @(f/send counter inc) ;; blocks until re-calculation based on message is completed (JVM only)
 @counter ;; => 1
 
-(def counter*2 (f/signal #(* 2 counter)))
+(def counter*2 (f/signal (* 2 counter)))
 (def dispose! (f/watch! counter*2 prn))
 
 @counter*2 ;; => 2
