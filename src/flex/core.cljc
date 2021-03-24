@@ -164,16 +164,32 @@
     cutoff?)))
 
 
+(defmacro signal
+  [& body]
+  (let [[opts body] (if (map? (first body))
+                      [(first body) (rest body)]
+                      [{} body])
+        multi-arity? (and (list? (first body))
+                          (vector? (ffirst body))
+                          (empty? (ffirst body)))]
+    (if multi-arity?
+      `(create-signal
+        ~opts
+        (fn ~@(first body))
+        ;; use ~@ to not emit if nil
+        ~@(when (some? (second body))
+            `((fn ~@(second body)))))
+      `(create-signal
+        ~opts
+        (fn [] ~@body)))))
+
+
 (defmacro defsig
   [sym & body]
   (let [[opts body] (if (map? (first body))
-                      [(first body) (rest body)]
-                      [{} body])]
-    `(def ~sym
-       (signal
-        ~opts
-        (fn []
-          ~@body)))))
+                      [(assoc (first body) :id sym) (rest body)]
+                      [{:id sym} body])]
+    `(def ~sym (signal ~opts ~@body))))
 
 
 (defn collect

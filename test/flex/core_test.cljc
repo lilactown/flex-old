@@ -71,26 +71,26 @@
 ;;              (t/is (= 4 @n))))))
 
 
-(t/deftest connection
+(t/deftest signals
   (async-test
    (t/testing "connection adds ref to the env"
      (let [n (f/input 0)
-           c (f/signal #(* 2 @n))]
+           c (f/signal (* 2 @n))]
        (t/is (= f/none @c))
        (f/connect! c)
        (<< (f/send n inc))
        (t/is (= 2 @c))))
    (t/testing "no refs"
-     (let [c (f/signal #(+ 1 2))]
+     (let [c (f/signal (+ 1 2))]
        (t/is (= f/none @c))
        (f/connect! c)
        (t/is (= 3 @c))))
    (t/testing "simple"
      (let [n (f/input 0)
            calls (atom 0)
-           c (f/signal (fn []
-                         (swap! calls inc)
-                         (* @n 2)))]
+           c (f/signal
+              (swap! calls inc)
+              (* @n 2))]
        (<< (f/send n inc))
        (t/is (= f/none @c))
        (t/is (= 0 @calls))
@@ -110,11 +110,11 @@
        (t/is (= 2 @calls) "Doesn't fire c again after d/c")))
    (t/testing "switch"
      (let [n (f/input 0)
-           a (f/signal (constantly "a"))
-           b (f/signal (constantly "b"))
-           c (f/signal #(if (even? @n)
-                          @a
-                          @b))]
+           a (f/signal "a")
+           b (f/signal "b")
+           c (f/signal (if (even? @n)
+                         @a
+                         @b))]
        (f/connect! c)
        (t/are [conn? x] (= conn? (f/connected? x))
          true a
@@ -137,9 +137,9 @@
          _ c)))
    (t/testing "propagates"
      (let [n (f/input 0)
-           a (f/signal #(deref n))
-           b (f/signal #(deref a))
-           c (f/signal #(deref b))]
+           a (f/signal (deref n))
+           b (f/signal (deref a))
+           c (f/signal (deref b))]
        (t/are [con? r] (= con? (f/connected? r))
          false a
          false b
@@ -155,7 +155,39 @@
        (t/are [con? r] (= con? (f/connected? r))
          false a
          false b
-         false c)))))
+         false c)))
+   (t/testing "1-arity"
+     (let [n (f/input 1)
+           fib* (fn fib*
+                  ([limit] (fib* limit [0 1]))
+                  ([limit [prev cur]]
+                   (let [next (+ prev cur)]
+                     (if (< next limit)
+                       (recur limit [cur next])
+                       [prev cur]))))
+           fib (f/signal
+                ([] (fib* @n))
+                ([v] (fib* @n v)))
+           fibs (f/collect [0] (map second) fib)]
+       (f/connect! fibs)
+
+       (t/is (= [0 1] @fib))
+       (t/is (= [0 1] @fibs))
+
+       (<< (f/send n inc))
+       (t/is (= [1 1] @fib))
+       (t/is (= [0 1 1] @fibs))
+
+       (<< (f/send n inc))
+       (t/is (= [1 2] @fib))
+       (t/is (= [0 1 1 2] @fibs))
+
+       (doseq [_ (range 10)]
+         (<< (f/send n inc)))
+
+       (t/is (= 13 @n))
+       (t/is (= [5 8] @fib))
+       (t/is (= [0 1 1 2 3 5 8] @fibs))))))
 
 
 (t/deftest remove-stale
@@ -163,11 +195,11 @@
    (let [n0 (f/input 0)
          n1 (f/input 0)
          calls (atom 0)
-         c (f/signal (fn []
-                       (swap! calls inc)
-                       (if (< @n0 2)
-                         (+ @n0 @n1)
-                         (* 10 @n0))))]
+         c (f/signal
+            (swap! calls inc)
+            (if (< @n0 2)
+              (+ @n0 @n1)
+              (* 10 @n0)))]
      (f/connect! c) ;; 1
      (t/is (= 0 @c))
 
@@ -186,10 +218,10 @@
 
    (t/testing "disconnects"
      (let [n (f/input 0)
-           ca (f/signal #(* @n 2))
-           cb (f/signal #(if (< @n 3)
-                           (inc @ca)
-                           42))]
+           ca (f/signal (* @n 2))
+           cb (f/signal (if (< @n 3)
+                          (inc @ca)
+                          42))]
        (f/connect! cb)
        (t/is (f/connected? ca))
 
@@ -207,15 +239,15 @@
   (async-test
    (let [n (f/input 0)
          runs (atom 0)
-         n*2 (f/signal (fn []
-                         (swap! runs inc)
-                         (* @n 2)))
-         n*3 (f/signal (fn []
-                         (swap! runs inc)
-                         (* @n 3)))
-         end (f/signal (fn []
-                         (swap! runs inc)
-                         (vector @n*2 @n*3)))]
+         n*2 (f/signal
+              (swap! runs inc)
+              (* @n 2))
+         n*3 (f/signal
+              (swap! runs inc)
+              (* @n 3))
+         end (f/signal
+              (swap! runs inc)
+              (vector @n*2 @n*3))]
      (f/connect! end)
      (t/is (= [0 0] @end))
      (t/is (= 3 @runs))
@@ -241,9 +273,9 @@
   (async-test
    (f/with-env (f/env)
      (let [n (f/input 0)
-           c (f/signal #(if (< @n 3)
-                          @n
-                          (throw (ex-info "Too big!" {}))))]
+           c (f/signal (if (< @n 3)
+                         @n
+                         (throw (ex-info "Too big!" {}))))]
        (f/connect! c)
        (<< (f/send n inc)) ;; 1
        (<< (f/send n inc)) ;; 2
@@ -262,12 +294,12 @@
    (t/testing "default - won't fire if ="
      (let [n (f/input 0)
            calls (atom {:ra 0 :rb 0})
-           ca (f/signal (fn []
-                          (swap! calls update :ra inc)
-                          (* @n 2)))
-           cb (f/signal (fn []
-                          (swap! calls update :rb inc)
-                          (inc @ca)))]
+           ca (f/signal
+               (swap! calls update :ra inc)
+               (* @n 2))
+           cb (f/signal
+               (swap! calls update :rb inc)
+               (inc @ca))]
        (f/connect! cb)
        (<< (f/send n identity))
 
@@ -282,24 +314,20 @@
            even-cutoff (f/signal
                         {:cutoff? (fn [old new]
                                     (even? new))}
-                        (fn []
-                          (swap! calls update :even-cutoff inc)
-                          @n))
+                        (swap! calls update :even-cutoff inc)
+                        @n)
            odd (f/signal
-                (fn []
-                  (swap! calls update :odd inc)
-                  @even-cutoff))
+                (swap! calls update :odd inc)
+                @even-cutoff)
 
            odd-cutoff (f/signal
                        {:cutoff? (fn [old new]
                                    (odd? new))}
-                       (fn []
-                         (swap! calls update :odd-cutoff inc)
-                         @n))
+                       (swap! calls update :odd-cutoff inc)
+                       @n)
            even (f/signal
-                 (fn []
-                   (swap! calls update :even inc)
-                   @odd-cutoff))]
+                 (swap! calls update :even inc)
+                 @odd-cutoff)]
        (f/connect! even)
        (f/connect! odd)
        (t/are [expected key] (= expected (get @calls key))
@@ -367,7 +395,32 @@
      (t/is (= {:name "Will" :counter 2} @db))
      (t/is (= "Hello, Will" @greeting))
      (t/is (= 2 @even-counter))
-     (t/is (= [0 2] @evens)))))
+     (t/is (= [0 2] @evens)))
+
+   (t/testing "multi-arity"
+     (let [db (f/input {:name "Will"
+                        :counter 0})]
+
+       (f/defsig counter
+         ([] (:counter @db)))
+
+       (f/defsig sum
+         ([] @counter)
+         ([total] (+ total @counter)))
+
+       (t/is (= f/none @counter))
+       (t/is (= f/none @sum))
+
+       (f/connect! sum)
+
+       (t/is (= {:name "Will" :counter 0} @db))
+       (t/is (= 0 @sum))
+
+       (<< (f/send db update :counter (fn [x] (prn x) (inc x))))
+       ;; (<< (f/send db update :counter inc))
+
+       ;; (t/is (= 3 @sum))
+       ))))
 
 
 (t/deftest collect
@@ -455,7 +508,7 @@
            even (f/signal
                  {:cutoff? (fn [_ v]
                              (odd? v))}
-                 #(deref n))
+                 (deref n))
            evens (f/collect [] even)]
        (f/connect! evens)
        (t/is (= [0] @evens))
@@ -489,16 +542,18 @@
        (<< (f/send n inc))
        (<< (f/send n inc))
        (t/is (= [1 2] @calls))))
-   (t/testing "signals"
+   (t/testing "create signals"
      (let [n (f/input 0)
            [acalls awatch] (spy)
            [bcalls bwatch] (spy)
            [ccalls cwatch] (spy)
-           a (f/signal #(* 2 @n))
-           b (f/signal #(if (even? @n)
-                          "even"
-                          "odd"))
-           c (f/signal {:cutoff? (fn [_ v] (even? v))} #(deref n))
+           a (f/signal (* 2 @n))
+           b (f/signal (if (even? @n)
+                         "even"
+                         "odd"))
+           c (f/signal
+              {:cutoff? (fn [_ v] (even? v))}
+              (deref n))
            adispose! (f/watch! a awatch)
            bdispose! (f/watch! b bwatch)
            cdispose! (f/watch! c cwatch)]
@@ -520,7 +575,7 @@
   (async-test
    (let [env (f/env :scheduler (sched/extremely-dumb-scheduler))
          n (f/input 0)
-         n*2 (f/signal #(* 2 @n))
+         n*2 (f/signal (* 2 @n))
          [calls call] (spy)]
      (f/with-env env
        (f/watch! n*2 call)
