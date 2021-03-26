@@ -164,21 +164,47 @@
     cutoff?)))
 
 
+(defn- signal-name?
+  [x]
+  (and (symbol? x) (not= "_" (name x))))
+
+
 (defmacro signal
   [& body]
-  (let [[opts body] (if (map? (first body))
-                      [(first body) (rest body)]
-                      [{} body])
+  #_(prn body)
+  (let [[id opts body] (let [[hd snd & tail] body]
+                         #_(prn hd snd tail)
+                         (cond
+                           (and (signal-name? hd) (map? snd))
+                           [hd (assoc snd :id (list 'quote hd)) tail]
+
+                           (signal-name? hd)
+                           [hd {:id (list 'quote hd)} (cons snd tail)]
+
+                           (map? hd)
+                           (let [id (gensym "incr_computation")]
+                             [id (assoc hd :id (list 'quote id)) (cons snd tail)])
+
+                           :else
+                           (let [id (gensym "incr_computation")]
+                             [id {:id (list 'quote id)} (cons
+                                                         hd
+                                                         (when snd
+                                                           (cons snd tail)))])))
         multi-arity? (and (list? (first body))
                           (vector? (ffirst body))
                           (empty? (ffirst body)))]
+    #_(prn id opts body)
     (if multi-arity?
-      `(create-signal
-        ~opts
-        (fn ~@(first body))
-        ;; use ~@ to not emit if nil
-        ~@(when (some? (second body))
-            `((fn ~@(second body)))))
+      (let [fn-expr `(fn ~id ~@body)
+            f (gensym)]
+        `(let [~f ~fn-expr]
+           (create-signal
+            ~opts
+            (fn [] (~f))
+            ;; use ~@ to not emit if nil
+            ~@(when (some? (second body))
+                `((fn [prev#] (~f prev#)))))))
       `(create-signal
         ~opts
         (fn [] ~@body)))))
@@ -189,7 +215,7 @@
   (let [[opts body] (if (map? (first body))
                       [(assoc (first body) :id sym) (rest body)]
                       [{:id sym} body])]
-    `(def ~sym (signal ~opts ~@body))))
+    `(def ~sym (signal ~sym ~opts ~@body))))
 
 
 (defn collect

@@ -156,18 +156,39 @@
          false a
          false b
          false c)))
+   (t/testing "named"
+     (let [n (f/input 0)
+           n+2 (f/signal n+2 (+ 2 @n))
+           n*3 (f/signal n*3 ([] (* 3 @n)))
+           even (f/signal even
+                 {:cutoff? (fn [_ x] (odd? x))}
+                 @n+2)
+           evens (f/collect [] even)]
+       (f/connect! n+2)
+       (f/connect! n*3)
+       (f/connect! evens)
+       (t/is (= 2 @n+2))
+       (t/is (= 0 @n*3))
+       (t/is (= [2] @evens))
+
+       (<< (f/send n inc))
+       (<< (f/send n inc))
+       (<< (f/send n inc))
+
+       (t/is (= 5 @n+2))
+       (t/is (= 9 @n*3))
+       (t/is (= [2 4] @evens))))
    (t/testing "1-arity"
      (let [n (f/input 1)
-           fib* (fn fib*
-                  ([limit] (fib* limit [0 1]))
-                  ([limit [prev cur]]
-                   (let [next (+ prev cur)]
-                     (if (< next limit)
-                       (recur limit [cur next])
-                       [prev cur]))))
-           fib (f/signal
-                ([] (fib* @n))
-                ([v] (fib* @n v)))
+           fib (f/signal fib
+                         ([] (fib [0 1]))
+                         ([v]
+                          (loop [limit @n
+                                 [prev cur] v]
+                            (let [next (+ prev cur)]
+                              (if (< next limit)
+                                (recur limit [cur next])
+                                [prev cur])))))
            fibs (f/collect [0] (map second) fib)]
        (f/connect! fibs)
 
@@ -416,11 +437,10 @@
        (t/is (= {:name "Will" :counter 0} @db))
        (t/is (= 0 @sum))
 
-       (<< (f/send db update :counter (fn [x] (prn x) (inc x))))
-       ;; (<< (f/send db update :counter inc))
+       (<< (f/send db update :counter inc))
+       (<< (f/send db update :counter inc))
 
-       ;; (t/is (= 3 @sum))
-       ))))
+       (t/is (= 3 @sum))))))
 
 
 (t/deftest collect
