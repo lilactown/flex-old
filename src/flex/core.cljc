@@ -73,7 +73,7 @@
   (let [env *environment*
         id (-identify computation)
         v (env/current-val env id none)
-        {:keys [deps]} (env/relations env id)
+        {:keys [deps]} (env/relations! env id)
 
         deps-state (atom #{})
         ;; TODO can we optimize when `rf` returns a reduced?
@@ -92,7 +92,7 @@
     ;; remove stale relations
     (doseq [dep (set/difference deps deps')]
       (env/remove-relation! env dep id)
-      (let [{:keys [computations]} (env/relations env dep)]
+      (let [{:keys [computations]} (env/relations! env dep)]
         (when (empty? computations)
           (disconnect! (env/get-ref env dep)))))
 
@@ -219,7 +219,7 @@
   [r]
   (let [env *environment*
         id (-identify r)
-        {:keys [deps computations]} (env/relations env id)]
+        {:keys [deps computations]} (env/relations! env id)]
     (when (seq computations)
       (throw (ex-info "Cannot disconnect computation which has dependents"
                       {:computations computations})))
@@ -227,7 +227,7 @@
     ;; remove all relations
     (doseq [dep deps]
       (env/remove-relation! env dep id)
-      (let [{:keys [computations]} (env/relations env dep)]
+      (let [{:keys [computations]} (env/relations! env dep)]
         (when (empty? computations)
           (disconnect! (env/get-ref env dep)))))
 
@@ -265,7 +265,7 @@
   [r]
   (let [env *environment*
         id (-identify r)
-        {:keys [deps computations]} (env/relations env id)]
+        {:keys [deps computations]} (env/relations! env id)]
     (boolean
      (or (seq deps)
          (seq computations)
@@ -349,7 +349,7 @@
               v (env/current-val env' id none)
               v' (binding [*environment* env']
                    (-receive src (into [x] args)))
-              {:keys [computations watches]} (env/relations env' id)
+              {:keys [computations watches]} (env/relations! env' id)
               heap (into-heap
                     (map
                      (fn [cid]
@@ -368,7 +368,7 @@
                 v (env/current-val env' rid none)
                 [v' cutoff?] (binding [*environment* env']
                                (-propagate! computation))
-                {:keys [computations watches]} (env/relations env' rid)
+                {:keys [computations watches]} (env/relations! env' rid)
                 heap' (cond-> heap
                         ;; remove computation from heap
                         true (update order disj computation)

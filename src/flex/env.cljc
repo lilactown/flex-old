@@ -85,8 +85,7 @@
 
 (defn relations!
   [env* id]
-  (let [env @env*]
-    (relations env id)))
+  (relations @env* id))
 
 
 (defn add-ref
@@ -106,7 +105,7 @@
 
 (defn clear-ref
   [env id]
-  (env update :refs dissoc id))
+  (update env :refs dissoc id))
 
 
 (defn clear-ref!

@@ -20,7 +20,7 @@
 
 (defn run-graph! [times]
   (let [env (f/env
-             :scheduler (f.s/->SynchronousSchedulerDoNotUse)
+             ;; :scheduler (f.s/->SynchronousSchedulerDoNotUse)
              )
         db (f/input {:limit 0 :chars "a"})
         limit (f/signal (:limit @db))
@@ -53,7 +53,7 @@
          ;; combinations []
          fib (fib* 0)]
     (if (zero? n)
-      #_combinations fib
+      #_combinations [(second fib) (:chars db)]
       (let [limit (:limit db)
             chars (:chars db)
             ;; recalculate all fibs every time
@@ -77,7 +77,7 @@
 
 #_(c/quick-bench (run-calc! 1000))
 
-#_(do (time (run-calc! 100000)) nil)
+#_(do (time (run-calc! 1000)) nil)
 
 #_(prof/profile (run-calc! 100000))
 

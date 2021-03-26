@@ -19,12 +19,18 @@ Work in progress. DO NOT EAT!
 * [x] Error handling: bails recomputing on error and does not update any variables
 * [x] Error handling: communicate error to sender
 * [x] Reified environments avoid global state
-* [x] Asynchronous scheduling of computations, splitting work
-* [ ] Parallelizing computations of the same height
-* [ ] Prioritizing computation based on message
-* [ ] Batching
 * [x] Changes can be observed and trigger effects on change
 * [ ] Computations can trigger side effects in the body
+* [ ] Closure to define initial state
+
+
+Scheduling
+
+* [x] Asynchronous scheduling of computations
+* [ ] Parallelizing computations of the same height
+* [ ] Prioritizing computation based on message
+* [ ] Time slicing ~16ms
+* [ ] Batching
 * [ ] Benchmarks
 * [ ] Tracing
 
