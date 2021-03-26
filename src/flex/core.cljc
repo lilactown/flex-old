@@ -18,6 +18,8 @@
 
 
 (defprotocol IComputation
+  (-on-connect! [computation])
+  (-on-disconnect! [computation])
   (-propagate! [computation]
     "Compute and return new value and whether to update dependents"))
 
@@ -53,9 +55,6 @@
 
 
 (def none `none)
-
-
-(def disconnected `disconnected)
 
 
 (defn raise-deref!
@@ -116,6 +115,8 @@
   (-propagate! [this]
     ;; recalculate
     (calculate! this input-fn cutoff?))
+  (-on-connect! [this])
+  (-on-disconnect! [this])
 
   IIncremental
   (-identify [this] id)
@@ -138,11 +139,6 @@
         ;; connected, cached
         :else
         v))))
-
-
-(defn- computation-rf
-  ([] none)
-  ([_ v] v))
 
 
 (defn create-signal
@@ -171,20 +167,22 @@
 
 (defmacro signal
   [& body]
-  #_(prn body)
   (let [[id opts body] (let [[hd snd & tail] body]
-                         #_(prn hd snd tail)
                          (cond
+                           ;; (signal name {} ,,,)
                            (and (signal-name? hd) (map? snd))
                            [hd (assoc snd :id (list 'quote hd)) tail]
 
+                           ;; (signal name ,,,)
                            (signal-name? hd)
                            [hd {:id (list 'quote hd)} (cons snd tail)]
 
+                           ;; (signal {} ,,,)
                            (map? hd)
                            (let [id (gensym "incr_computation")]
                              [id (assoc hd :id (list 'quote id)) (cons snd tail)])
 
+                           ;; (signal ,,,)
                            :else
                            (let [id (gensym "incr_computation")]
                              [id {:id (list 'quote id)} (cons
@@ -194,7 +192,6 @@
         multi-arity? (and (list? (first body))
                           (vector? (ffirst body))
                           (empty? (ffirst body)))]
-    #_(prn id opts body)
     (if multi-arity?
       (let [fn-expr `(fn ~id ~@body)
             f (gensym)]
@@ -237,14 +234,16 @@
 
 
 (defn connect!
-  [r]
-  (first (-propagate! r)))
+  [c]
+  (doto c
+    (-propagate!)
+    (-on-connect!)))
 
 
 (defn disconnect!
-  [r]
+  [c]
   (let [env *environment*
-        id (-identify r)
+        id (-identify c)
         {:keys [deps computations]} (env/relations! env id)]
     (when (seq computations)
       (throw (ex-info "Cannot disconnect computation which has dependents"

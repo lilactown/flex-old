@@ -21,7 +21,8 @@ Work in progress. DO NOT EAT!
 * [x] Reified environments avoid global state
 * [x] Changes can be observed and trigger effects on change
 * [ ] Computations can trigger side effects in the body
-* [ ] Closure to define initial state
+* [ ] Closure to create some shared state on connect?
+* [ ] Spec / validation?
 
 
 Scheduling
@@ -44,7 +45,8 @@ Scheduling
 @(f/send counter inc) ;; blocks until re-calculation based on message is completed (JVM only)
 @counter ;; => 1
 
-(def counter*2 (f/signal (* 2 counter)))
+;; create a calculation based on counter
+(def counter*2 (f/signal (* 2 @counter)))
 (def dispose! (f/watch! counter*2 prn))
 
 @counter*2 ;; => 2
