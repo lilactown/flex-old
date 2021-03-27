@@ -14,12 +14,12 @@
 
 
 (defprotocol IIncremental
-  (-identify [incr] "Returns a unique identifier for the incremental object"))
+  (-identify [incr] "Returns a unique identifier for the incremental object")
+  (-on-connect! [computation])
+  (-on-disconnect! [computation]))
 
 
 (defprotocol IComputation
-  (-on-connect! [computation])
-  (-on-disconnect! [computation])
   (-propagate! [computation]
     "Compute and return new value and whether to update dependents"))
 
@@ -110,16 +110,18 @@
     [v' (and (some? cutoff?) (cutoff? v v'))]))
 
 
-(deftype IncrementalComputation [id input-fn cutoff?]
+(deftype IncrementalComputation [id input-fn cutoff? on-connect on-disconnect]
   IComputation
   (-propagate! [this]
     ;; recalculate
     (calculate! this input-fn cutoff?))
-  (-on-connect! [this])
-  (-on-disconnect! [this])
 
   IIncremental
   (-identify [this] id)
+  (-on-connect! [this])
+  (-on-disconnect! [this]
+    (when (some? on-disconnect)
+      (on-disconnect this)))
 
   #?(:clj clojure.lang.IDeref
      :cljs IDeref)
@@ -144,20 +146,25 @@
 (defn create-signal
   ([f]
    (create-signal {} f))
-  ([{:keys [id cutoff?]} f]
+  ([{:keys [id cutoff? on-disconnect]} f]
    (->IncrementalComputation
     (or id (gensym "incr_computation"))
     (fn input-fn
       ([] (f))
       ([_prev] (f)))
-    cutoff?))
-  ([{:keys [id cutoff?]} f0 f1]
-   (->IncrementalComputation
-    (or id (gensym "incr_computation"))
-    (fn input-fn
-      ([] (f0))
-      ([prev] (f1 prev)))
-    cutoff?)))
+    cutoff?
+    nil on-disconnect))
+  ([{:keys [id cutoff? on-disconnect] :as opts} f0 f1]
+   (if (some? f1)
+     (->IncrementalComputation
+      (or id (gensym "incr_computation"))
+      (fn input-fn
+        ([] (f0))
+        ([prev] (f1 prev)))
+      cutoff?
+      nil on-disconnect)
+     ;; sometimes f1 gets passed as nil; just vibe with it
+     (create-signal opts f0))))
 
 
 (defn- signal-name?
@@ -222,7 +229,7 @@
     (fn
       ([] (conj init (deref c)))
       ([coll] (conj coll (deref c))))
-    nil))
+    nil nil nil))
   ([init xform c]
    (->IncrementalComputation
     (gensym (str (-identify c) "_collect"))
@@ -230,7 +237,7 @@
       (fn input-fn
         ([] (rf init @c))
         ([prev] (rf prev @c))))
-    nil)))
+    nil nil nil)))
 
 
 (defn connect!
@@ -250,6 +257,8 @@
         (throw (ex-info "Cannot disconnect computation which has dependents"
                         {:computations computations})))
 
+      ;; run side effects first
+      (-on-disconnect! c)
       ;; remove all relations
       (doseq [dep deps]
         (env/remove-relation! env dep id)
@@ -299,6 +308,86 @@
 
 
 ;;
+;; -- memoized computations
+;;
+
+
+;; TODO explore core.memoize
+;; this may not handle concurrency as well as we'd like
+(def ^:private compute-cache (atom {}))
+
+
+(defn- establish-cache!
+  [env id args c]
+  (swap! compute-cache assoc-in [env id args] c))
+
+
+(defn- lookup-cache
+  [env id args]
+  (get-in @compute-cache [env id args]))
+
+
+(defn- remove-cache!
+  [env id args]
+  (swap! compute-cache
+         (fn [cache]
+           (let [cache' (update-in cache [env id] dissoc args)]
+             ;; remove id from cache completely if no other args present
+             (if (empty? (get-in cache' [env id]))
+               (let [cache' (update cache' env dissoc id)]
+                 (if (empty? (get cache' env))
+                   (dissoc cache' env)
+                   cache'))
+               cache')))))
+
+
+(defn create-signal-fn
+  ([f]
+   (create-signal-fn {} f))
+  ([{:keys [id cutoff?] :as opts} f]
+   (create-signal-fn opts f nil))
+  ([{:keys [id cutof??] :as opts} f0 f1]
+   (let [id (gensym "incr_comp_fn")]
+     (fn [& args]
+       (if-some [c (lookup-cache *environment* id args)]
+         c
+         (doto (create-signal
+                (-> opts
+                    ;; ensure we always get a unique id
+                    (dissoc :id)
+                    (assoc :on-disconnect
+                           (fn [_] (remove-cache! *environment* id args))))
+                #(apply f0 args)
+                (when (some? f1)
+                  #(apply f1 % args)))
+           (->> (establish-cache! *environment* id args))))))))
+
+
+(comment
+  (def n (input 0))
+
+  (def adder
+    (create-signal-fn
+     (fn [a b]
+       (+ @n a b))))
+
+  (def n+1+2 (adder 1 2))
+
+  @compute-cache
+
+  ;; doesn't handle reconnect :(
+  (connect! n+1+2)
+
+  @n
+
+  @n+1+2
+
+  @(send n inc)
+
+  (disconnect! n+1+2))
+
+
+;;
 ;; -- sources
 ;;
 
@@ -315,6 +404,8 @@
 
   IIncremental
   (-identify [this] id)
+  (-on-connect! [this])
+  (-on-disconnect! [this])
 
   #?(:clj clojure.lang.IDeref
      :cljs IDeref)
