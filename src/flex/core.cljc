@@ -320,49 +320,50 @@
 
 
 (defn- establish-cache!
-  [env id args c]
-  (swap! compute-cache assoc-in [env id args] c))
+  [id args c]
+  (swap! compute-cache assoc-in [id args] c))
 
 
 (defn- lookup-cache
-  [env id args]
-  (get-in @compute-cache [env id args]))
+  [id args]
+  (get-in @compute-cache [id args]))
 
 
 (defn- remove-cache!
-  [env id args]
+  [id args]
   (swap! compute-cache
          (fn [cache]
-           (let [cache' (update-in cache [env id] dissoc args)]
+           (let [cache' (update cache id dissoc args)]
              ;; remove id from cache completely if no other args present
-             (if (empty? (get-in cache' [env id]))
-               (let [cache' (update cache' env dissoc id)]
-                 (if (empty? (get cache' env))
-                   (dissoc cache' env)
-                   cache'))
+             (if (empty? (get cache' id))
+               (dissoc cache' id)
                cache')))))
 
 
 (defn create-signal-fn
-  ([f]
-   (create-signal-fn {} f))
-  ([{:keys [id cutoff?] :as opts} f]
-   (create-signal-fn opts f nil))
-  ([{:keys [id cutof??] :as opts} f0 f1]
-   (let [id (gensym "incr_comp_fn")]
-     (fn [& args]
-       (if-some [c (lookup-cache *environment* id args)]
-         c
-         (doto (create-signal
-                (-> opts
-                    ;; ensure we always get a unique id
-                    (dissoc :id)
-                    (assoc :on-disconnect
-                           (fn [_] (remove-cache! *environment* id args))))
-                #(apply f0 args)
-                (when (some? f1)
-                  #(apply f1 % args)))
-           (->> (establish-cache! *environment* id args))))))))
+  [f]
+  (let [memo-id (gensym "incr_comp_fn")]
+    (fn [& args]
+      (if-some [c (lookup-cache memo-id args)]
+        c
+        (let [inner-c (apply f args)
+              env *environment*
+              ref-count (atom 0)
+              c (->IncrementalComputation
+                 (gensym memo-id)
+                 (fn
+                   ([] @inner-c)
+                   ([_] @inner-c))
+                 nil
+                 ;; on-connect
+                 (fn [_] (swap! ref-count inc))
+                 ;; on-disconnect
+                 (fn [_]
+                   (swap! ref-count dec)
+                   (when (zero? (doto @ref-count prn))
+                     (remove-cache! memo-id args))))]
+          (establish-cache! memo-id args c)
+          c)))))
 
 
 (comment
