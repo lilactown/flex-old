@@ -57,7 +57,7 @@
 (def none `none)
 
 
-(defn raise-deref!
+(defn- raise-deref!
   [c]
   (if *deps*
     (do (swap! *deps* conj c) true)
@@ -150,6 +150,19 @@
 
 
 (defn create-signal
+  "Creates a new stateful dataflow computation that, when connected, updates its
+  state by recomputing when any of its dependencies change. See `signal` for the
+  much nicer syntax.
+
+  When passed a single function `f`,  will create a computation that runs (f)
+  every time its dependencies change.
+
+  When passed a `cutoff?` function (fn [old-state new-state]) in the opts map,
+  will only propagate changes to dependents after recomputing when the cutoff
+  function returns false.
+
+  When passed two functions `f0` and `f1`, will run (f0) to compute initial
+  state and (f1 old-state) on subsequent recomputations."
   ([f]
    (create-signal {} f))
   ([{:keys [id cutoff? on-disconnect]} f]
@@ -179,7 +192,31 @@
 
 
 (defmacro signal
-  {:style/indent [:defn]}
+  "Creates a new stateful dataflow computation that, when connected, updates its
+  state by recomputing when any of its dependencies change.
+
+  Can be a simple expression based on other dataflow inputs or computations.
+  Optionally, you can passe a 0-arity and 1-arity definition, which will call
+  the 0-arity expr to compute initial state, then the 1-arity definition with
+  the previous state on each subsequent recomputation.
+
+  An opts map may be provided to define the following:
+   * :cutoff? - a boolean function (fn [old-state new-state]) that determines
+     whether to update dependents after recomputing. Default (constantly false).
+   * :on-connect - a side-effecting function (fn [sig]) to run when the
+     computation first connects.
+   * :on-disconnect - a side-effecting function (fn [sig]) to run when the
+     computation disconnects.
+
+  Optionally, a symbol can be provided as a name to allow self-reference in the
+  body."
+  {:style/indent [:defn]
+   :forms '[(signal name? opts? exprs*)
+            (signal name? opts? ([] exprs*))
+            (signal name?
+              opts?
+              ([] exprs*)
+              ([prev] exprs*))]}
   [& body]
   (let [[id opts body] (let [[hd snd & tail] body]
                          (cond
@@ -222,15 +259,39 @@
 
 
 (defmacro defsig
-  {:style/indent [:defn]}
+  "Same as (def name (signal name ~@body))."
+  {:style/indent [:defn]
+   :arglists '([name doc-string? opts? body]
+               [name doc-string? opts? ([] body)]
+               [name doc-string? opts? ([] body) ([prev] body)])}
   [sym & body]
-  (let [[opts body] (if (map? (first body))
-                      [(assoc (first body) :id sym) (rest body)]
-                      [{:id sym} body])]
-    `(def ~sym (signal ~sym ~opts ~@body))))
+  (let [[docstring opts body] (cond
+                                ;; (defsig name {} ,,,)
+                                (map? (first body))
+                                [nil (assoc (first body) :id sym) (rest body)]
+
+                                ;; (defsig name "docstring" {} ,,,)
+                                ;; wrap docstring in a seqable so we can prevent
+                                ;; emitting it with ~@ when nil
+                                (and (string? (first body)) (map? (second body)))
+                                [[(first body)] (second body) (rest (rest body))]
+
+                                ;; (defsig name "docstring" ,,,)
+                                (string? (first body))
+                                [[(first body)] {:id sym} (rest body)]
+
+                                ;; (defsig name ,,,)
+                                :else
+                                [nil {:id sym} body])]
+    `(def ~sym ~@docstring (signal ~sym ~opts ~@body))))
 
 
 (defn collect
+  "Like `into` for dataflow.
+
+  Takes an initial value, an optional transducer, and a dataflow object `c`.
+  Returns a dataflow computation that will `conj` each value propagated from `c`
+  with the previous collection."
   ([init c]
    (->IncrementalComputation
     (gensym (str (-identify c) "_collect"))
@@ -249,11 +310,17 @@
 
 
 (defn connect!
+  "Connects a dataflow computation `c` and any of its dependencies. `c` and any
+  of its dependencies  will synchronously compute its initial value, and will
+  recompute when its dependencies change. Returns `c`."
   [c]
   (doto c (-propagate!)))
 
 
 (defn disconnect!
+  "Disconnects a dataflow computation `c`, clearing its state and ensuring that
+  it will not recompute again unless reconnected. Will also disconnect any
+  dependencies that have no other dependents. Returns `c`."
   [c]
   (when (satisfies? IComputation c)
     (let [env *environment*
@@ -276,10 +343,15 @@
       (env/clear-ref! env id)
 
       ;; remove value if not a source
-      (env/clear-val! env id))))
+      (env/clear-val! env id)))
+  c)
 
 
 (defn watch!
+  "Connects and watches a dataflow object `c`, calling `f` anytime the state
+  changes. Returns a 'dispose' function which will remove the watcher and
+  disconnect `c` if it has no other dependents. Returns `true` if it disconnects
+  `c`."
   [c f]
   ;; lexically bind *environment* so that we properly close over it in
   ;; the dispose fn
@@ -299,13 +371,14 @@
           (catch #?(:clj Exception
                     :cljs js/Error) e
             false))
-        true))))
+        false))))
 
 
 (defn connected?
-  [r]
+  "Returns true if dataflow computation `c` is currently connected."
+  [c]
   (let [env *environment*
-        id (-identify r)
+        id (-identify c)
         {:keys [deps computations]} (env/relations! env id)]
     (boolean
      (or (seq deps)
@@ -345,6 +418,12 @@
 
 
 (defn create-signal-fn
+  "Creates a memoized computation factory `fc`. `f` is a function that takes any
+  arguments and returns a signal `c`. Subsequent calls to the factory will
+  immediately return the same `c` until it is disconnected, when it will clear
+  the cache and next call to `fc` will re-run `f` to create a new `c`.
+
+  See `signal-fn` for nicer syntax."
   [f]
   (let [memo-id (gensym "flex_comp_fn")]
     (fn [& args]
@@ -370,7 +449,17 @@
 
 
 (defmacro signal-fn
-  {:style/indent [:defn]}
+  "Creates a memoized computation factory. Takes same parameters as
+  `clojure.core/fn`. The body of the factory should return a dataflow
+  computation such as one created via `signal`.
+
+  The first call to the function returned by this helper will execute the body
+  and cache the dataflow computation `c`. Subsequent calls to the factory will
+  immediately return the same `c` until it is disconnected, when it will clear
+  the cache and next call to `fc` will re-run the factory to create a new `c`."
+  {:style/indent [:defn]
+   :forms '[(signal-fn name? [params*] exprs*)
+            (signal-fn name? ([params*] exprs*) +)]}
   [& body]
   `(create-signal-fn
     (fn ~@body)))
@@ -408,6 +497,9 @@
 
 
 (defn source
+  "Creates a new dataflow source. `rf` is a reducer function which takes the
+  current state and a new message, and returns the new state. (rf) is called to
+  compute the initial state."
   ([rf]
    (source {:id (gensym "flex_src")} rf))
   ([{:keys [id]} rf]
@@ -415,6 +507,9 @@
 
 
 (defn input
+  "Creates a new dataflow input with initial state `init`. An input is a source
+  which will apply any function and args sent to its current state, similar to
+  `clojure.core/swap!`."
   ([init] (input {:id (gensym "flex_input")} init))
   ([{:keys [id]} init]
    (->IncrementalSource
@@ -440,7 +535,11 @@
     order+computations)))
 
 
-(defn send [src x & args]
+(defn send
+  "Sends a message to `src`, scheduling computation of its state and any
+  dependent dataflow computations. Returns a promise which settles when the
+  computation has completed, or throws if an error occurs during computation."
+  [src & message]
   (let [env *environment*
         {:keys [scheduler]} @env
         retries (atom 0)]
@@ -453,7 +552,7 @@
               id (-identify src)
               v (env/current-val env' id none)
               v' (binding [*environment* env']
-                   (-receive src (into [x] args)))
+                   (-receive src message))
               {:keys [computations watches]} (env/relations! env' id)
               heap (into-heap
                     (map
