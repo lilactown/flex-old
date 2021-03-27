@@ -58,9 +58,9 @@
 
 
 (defn raise-deref!
-  [incr]
+  [c]
   (if *deps*
-    (do (swap! *deps* conj incr) true)
+    (do (swap! *deps* conj c) true)
     false))
 
 
@@ -193,12 +193,12 @@
 
                            ;; (signal {} ,,,)
                            (map? hd)
-                           (let [id (gensym "incr_computation")]
+                           (let [id (gensym "flex_computation")]
                              [id (assoc hd :id (list 'quote id)) (cons snd tail)])
 
                            ;; (signal ,,,)
                            :else
-                           (let [id (gensym "incr_computation")]
+                           (let [id (gensym "flex_computation")]
                              [id {:id (list 'quote id)} (cons
                                                          hd
                                                          (when snd
@@ -346,12 +346,11 @@
 
 (defn create-signal-fn
   [f]
-  (let [memo-id (gensym "incr_comp_fn")]
+  (let [memo-id (gensym "flex_comp_fn")]
     (fn [& args]
       (if-some [c (lookup-cache memo-id args)]
         c
         (let [inner-c (apply f args)
-              env *environment*
               ref-count (atom 0)
               c (->IncrementalComputation
                  (gensym memo-id)
@@ -375,46 +374,6 @@
   [& body]
   `(create-signal-fn
     (fn ~@body)))
-
-
-(comment
-  (def n (input 0))
-
-  (def adder
-    (signal-fn [a b]
-      (prn :construct)
-      (signal (+ @n a b))))
-
-  (def n+1+2 (adder 1 2))
-
-  (def p n+1+2)
-
-
-  (= p n+1+2)
-
-  @compute-cache
-
-  ;; doesn't handle reconnect :(
-  (connect! (adder 1 2))
-
-  (connected? n+1+2)
-
-  (= (adder 1 2) n+1+2)
-
-  @n
-
-  @n+1+2
-
-  @(send n inc)
-
-
-  (with-env (env)
-    (connect! (adder 1 2))
-    @(adder 1 2))
-
-  (disconnect! (adder 1 2))
-
-  )
 
 
 ;;
@@ -450,13 +409,13 @@
 
 (defn source
   ([rf]
-   (source {:id (gensym "incr_src")} rf))
+   (source {:id (gensym "flex_src")} rf))
   ([{:keys [id]} rf]
    (->IncrementalSource id rf)))
 
 
 (defn input
-  ([init] (input {:id (gensym "incr_input")} init))
+  ([init] (input {:id (gensym "flex_input")} init))
   ([{:keys [id]} init]
    (->IncrementalSource
     id
