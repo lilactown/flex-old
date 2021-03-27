@@ -1,28 +1,5 @@
 (ns flex.core
-  "A library for creating dynamic, incremental dataflow programs in Clojure(Script).
-
-  Terminology:
-  * Incremental dataflow: whenever a piece of data changes, attempt to save time
-    by only recomputing that which depend on the changed data
-
-  * Dataflow source: a state container which can change its state when it
-    receives messages (any kind of value)
-
-  * Dataflow computation: a state container with a function that will be used to
-    compute its state based on sources or other computations. The function may
-    be called automatically anytime a dependency changes to update its state.
-
-  * Dataflow object: either a source or a computation.
-
-  * Dataflow graph: a collection of dataflow objects w/ relations to one another.
-
-  * Connection: when a computation is first constructed, it is \"disconnected\".
-    This means it will not automatically compute its state. Once \"connected\",
-    it will synchronously compute its stay and may be recomputed automatically
-    based on changes to its dependencies.
-
-  * Environment: a scope which dataflow graphs can be connected, sent messages
-    and recomputed in isolation form other environments."
+  "A library for creating dynamic, incremental dataflow programs in Clojure(Script)."
   (:require
    [clojure.set :as set]
    [flex.env :as env]
@@ -358,8 +335,8 @@
   (when (satisfies? IComputation c)
     (let [env *environment*
           id (-identify c)
-          {:keys [deps computations]} (env/relations! env id)]
-      (when (seq computations)
+          {:keys [deps computations watches]} (env/relations! env id)]
+      (when (or (seq computations) (seq watches))
         (throw (ex-info "Cannot disconnect computation which has dependents"
                         {:computations computations})))
 
@@ -475,7 +452,7 @@
                  ;; on-disconnect
                  (fn [_]
                    (swap! ref-count dec)
-                   (when (zero? (doto @ref-count prn))
+                   (when (zero? @ref-count)
                      (remove-cache! memo-id args))))]
           (establish-cache! memo-id args c)
           c)))))
