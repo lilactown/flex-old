@@ -179,6 +179,7 @@
 
 
 (defmacro signal
+  {:style/indent [:defn]}
   [& body]
   (let [[id opts body] (let [[hd snd & tail] body]
                          (cond
@@ -221,6 +222,7 @@
 
 
 (defmacro defsig
+  {:style/indent [:defn]}
   [sym & body]
   (let [[opts body] (if (map? (first body))
                       [(assoc (first body) :id sym) (rest body)]
@@ -368,20 +370,36 @@
           c)))))
 
 
+(defmacro signal-fn
+  {:style/indent [:defn]}
+  [& body]
+  `(create-signal-fn
+    (fn ~@body)))
+
+
 (comment
   (def n (input 0))
 
   (def adder
-    (create-signal-fn
-     (fn [a b]
-       (+ @n a b))))
+    (signal-fn [a b]
+      (prn :construct)
+      (signal (+ @n a b))))
 
   (def n+1+2 (adder 1 2))
+
+  (def p n+1+2)
+
+
+  (= p n+1+2)
 
   @compute-cache
 
   ;; doesn't handle reconnect :(
-  (connect! n+1+2)
+  (connect! (adder 1 2))
+
+  (connected? n+1+2)
+
+  (= (adder 1 2) n+1+2)
 
   @n
 
@@ -389,7 +407,14 @@
 
   @(send n inc)
 
-  (disconnect! n+1+2))
+
+  (with-env (env)
+    (connect! (adder 1 2))
+    @(adder 1 2))
+
+  (disconnect! (adder 1 2))
+
+  )
 
 
 ;;
