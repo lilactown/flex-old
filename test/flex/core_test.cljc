@@ -89,8 +89,8 @@
      (let [n (f/input 0)
            calls (atom 0)
            c (f/signal
-              (swap! calls inc)
-              (* @n 2))]
+               (swap! calls inc)
+               (* @n 2))]
        (<< (f/send n inc))
        (t/is (= f/none @c))
        (t/is (= 0 @calls))
@@ -161,8 +161,8 @@
            n+2 (f/signal n+2 (+ 2 @n))
            n*3 (f/signal n*3 ([] (* 3 @n)))
            even (f/signal even
-                 {:cutoff? (fn [_ x] (odd? x))}
-                 @n+2)
+                  {:cutoff? (fn [_ x] (odd? x))}
+                  @n+2)
            evens (f/collect [] even)]
        (f/connect! n+2)
        (f/connect! n*3)
@@ -181,14 +181,14 @@
    (t/testing "1-arity"
      (let [n (f/input 1)
            fib (f/signal fib
-                         ([] (fib [0 1]))
-                         ([v]
-                          (loop [limit @n
-                                 [prev cur] v]
-                            (let [next (+ prev cur)]
-                              (if (< next limit)
-                                (recur limit [cur next])
-                                [prev cur])))))
+                 ([] (fib [0 1]))
+                 ([v]
+                  (loop [limit @n
+                         [prev cur] v]
+                    (let [next (+ prev cur)]
+                      (if (< next limit)
+                        (recur limit [cur next])
+                        [prev cur])))))
            fibs (f/collect [0] (map second) fib)]
        (f/connect! fibs)
 
@@ -217,10 +217,10 @@
          n1 (f/input 0)
          calls (atom 0)
          c (f/signal
-            (swap! calls inc)
-            (if (< @n0 2)
-              (+ @n0 @n1)
-              (* 10 @n0)))]
+             (swap! calls inc)
+             (if (< @n0 2)
+               (+ @n0 @n1)
+               (* 10 @n0)))]
      (f/connect! c) ;; 1
      (t/is (= 0 @c))
 
@@ -261,14 +261,14 @@
    (let [n (f/input 0)
          runs (atom 0)
          n*2 (f/signal
-              (swap! runs inc)
-              (* @n 2))
+               (swap! runs inc)
+               (* @n 2))
          n*3 (f/signal
-              (swap! runs inc)
-              (* @n 3))
+               (swap! runs inc)
+               (* @n 3))
          end (f/signal
-              (swap! runs inc)
-              (vector @n*2 @n*3))]
+               (swap! runs inc)
+               (vector @n*2 @n*3))]
      (f/connect! end)
      (t/is (= [0 0] @end))
      (t/is (= 3 @runs))
@@ -316,11 +316,11 @@
      (let [n (f/input 0)
            calls (atom {:ra 0 :rb 0})
            ca (f/signal
-               (swap! calls update :ra inc)
-               (* @n 2))
+                (swap! calls update :ra inc)
+                (* @n 2))
            cb (f/signal
-               (swap! calls update :rb inc)
-               (inc @ca))]
+                (swap! calls update :rb inc)
+                (inc @ca))]
        (f/connect! cb)
        (<< (f/send n identity))
 
@@ -333,22 +333,22 @@
                         :even-cutoff 0
                         :odd 0})
            even-cutoff (f/signal
-                        {:cutoff? (fn [old new]
-                                    (even? new))}
-                        (swap! calls update :even-cutoff inc)
-                        @n)
+                         {:cutoff? (fn [old new]
+                                     (even? new))}
+                         (swap! calls update :even-cutoff inc)
+                         @n)
            odd (f/signal
-                (swap! calls update :odd inc)
-                @even-cutoff)
+                 (swap! calls update :odd inc)
+                 @even-cutoff)
 
            odd-cutoff (f/signal
-                       {:cutoff? (fn [old new]
-                                   (odd? new))}
-                       (swap! calls update :odd-cutoff inc)
-                       @n)
+                        {:cutoff? (fn [old new]
+                                    (odd? new))}
+                        (swap! calls update :odd-cutoff inc)
+                        @n)
            even (f/signal
-                 (swap! calls update :even inc)
-                 @odd-cutoff)]
+                  (swap! calls update :even inc)
+                  @odd-cutoff)]
        (f/connect! even)
        (f/connect! odd)
        (t/are [expected key] (= expected (get @calls key))
@@ -526,9 +526,9 @@
    (t/testing "depends on computation"
      (let [n (f/input 0)
            even (f/signal
-                 {:cutoff? (fn [_ v]
-                             (odd? v))}
-                 (deref n))
+                  {:cutoff? (fn [_ v]
+                              (odd? v))}
+                  (deref n))
            evens (f/collect [] even)]
        (f/connect! evens)
        (t/is (= [0] @evens))
@@ -572,8 +572,8 @@
                          "even"
                          "odd"))
            c (f/signal
-              {:cutoff? (fn [_ v] (even? v))}
-              (deref n))
+               {:cutoff? (fn [_ v] (even? v))}
+               (deref n))
            adispose! (f/watch! a awatch)
            bdispose! (f/watch! b bwatch)
            cdispose! (f/watch! c cwatch)]
