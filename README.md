@@ -12,28 +12,28 @@ Work in progress. DO NOT EAT!
 * Incremental dataflow: whenever a piece of data changes, attempt to save time
   by only recomputing that which depend on the changed data
 
-* Dataflow source: a state container which can change its state when it
-  receives messages (any kind of value)
+* Source: a state container which can change its state when it receives messages
+  (any kind of value)
 
-* Dataflow computation: a state container with a function that will be used to
-  compute its state based on sources or other computations. The function may
-  be called automatically anytime a dependency changes to update its state.
+* Computation: a state container with a function that will be used to compute
+  its state based on sources or other computations. The function may be called
+  automatically anytime a dependency changes to update its state.
 
 * Dataflow object: either a source or a computation.
 
 * Dataflow graph: a collection of dataflow objects w/ relations to one another.
 
-* Connection: when a computation is first constructed, it is \"disconnected\".
+* Connecting: when a computation is first constructed, it is \"disconnected\".
   This means it will not automatically compute its state. Once \"connected\",
   it will synchronously compute its stay and may be recomputed automatically
   based on changes to its dependencies.
 
 * Environment: a scope which dataflow graphs can be connected, sent messages
-  and recomputed in isolation form other environments.
+  and recomputed in isolation from other environments.
 
 ## TODO 
 
-* [x] Data sources can be created via `input` and `source`
+* [x] sources can be created via `input` and `source`
 * [x] Messages can be sent to sources via `flex.core/send` to update them.
 * [x] Computations can be created via `signal` and `defsig`
 * [x] Aggregations of values over time can be created via `collect`
