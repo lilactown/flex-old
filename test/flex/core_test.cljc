@@ -608,24 +608,56 @@
 
 
 (t/deftest signal-fn
-  (let [n (f/input 0)
-        n+ (f/signal-fn [m]
-             (f/signal (+ @n m)))
-        n+2 (n+ 2)
-        n+10 (n+ 10)
+  (t/testing "simple"
+    (let [n (f/input 0)
+          n+ (f/signal-fn [m]
+               (f/signal (+ @n m)))
+          n+2 (n+ 2)
+          n+10 (n+ 10)
 
-        n*2+12 (f/signal (+ @(n+ 2) @(n+ 10)))]
-    (t/is (not= n+2 n+10))
-    (t/is (and (= n+2 (n+ 2))
-               (= n+10 (n+ 10))))
+          n*2+12 (f/signal (+ @(n+ 2) @(n+ 10)))]
+      (t/is (not= n+2 n+10))
+      (t/is (and (= n+2 (n+ 2))
+                 (= n+10 (n+ 10))))
 
-    (f/connect! n*2+12)
+      (f/connect! n*2+12)
 
-    (t/is (and (f/connected? n+2) (f/connected? n+10)))
+      (t/is (and (f/connected? n+2) (f/connected? n+10)))
 
-    (f/disconnect! n*2+12)
+      (f/disconnect! n*2+12)
 
-    (t/is (and (not (f/connected? n+2))
-               (not (f/connected? n+10))))
+      (t/is (and (not (f/connected? n+2))
+                 (not (f/connected? n+10))))
 
-    (t/is (not= (n+ 2) n+2))))
+      (t/is (not= (n+ 2) n+2))))
+  (t/testing "env"
+    (let [env (f/env)
+          n (f/input 0)
+          !+ (f/signal-fn [c m]
+               (f/signal (+ @c m)))
+          n+2 (!+ n 2)]
+      (f/with-env env
+        (f/connect! n+2)
+        (t/is (= 2 @n+2)))
+
+      (f/connect! n+2)
+      (t/is (= 2 @n+2))
+
+      (f/disconnect! n+2)
+      (t/is (not (f/connected? n+2)))
+
+      (t/testing "stays cached when other env is still connected"
+        (f/with-env env
+          (t/is (f/connected? n+2))
+          (t/is (= 2 @n+2))
+          (t/is (= n+2 (!+ n 2)))))
+
+      (t/is (= n+2 (!+ n 2)))
+
+      (f/with-env env
+        (f/disconnect! n+2)
+        (t/is (not (f/connected? n+2))))
+
+      (t/is (not= n+2 (!+ n 2)))
+      (f/with-env env
+        (not= n+2 (!+ n 2))))))
