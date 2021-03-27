@@ -28,13 +28,22 @@
 ;; -- environments
 ;;
 
-(defn env [& {:keys [scheduler]
-              :or {scheduler (async-scheduler/async-scheduler)}}]
+(defn env
+  "Creates a new environment, in which all dataflow object state will be
+  isolated. See `with-env`.
+
+  Optionally takes a named arg `:scheduler` which computations of the dataflow
+  graph will be executed with."
+  [& {:keys [scheduler]
+      :or {scheduler (async-scheduler/async-scheduler)}}]
   (env/create-env
    {:scheduler scheduler}))
 
 
 (defmacro with-env
+  "Wraps an expression with an environment `env`, isolating all of its changes
+  to the dataflow graph to only be seen by other calls wrapped with `env`.
+  This includes calls to: `connect!`, `disconnect!`, `watch!`, `send`, and deref"
   [env & body]
   `(binding [*environment* ~env]
      ~@body))
