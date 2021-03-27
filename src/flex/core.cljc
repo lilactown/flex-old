@@ -82,7 +82,11 @@
                           (input-fn v))))
 
         deps' (into #{} (map -identify @deps-state))]
-    (env/add-ref! env id computation)
+    (let [ref (env/get-ref env id)]
+      (when (nil? ref)
+        ;; we're connecting for the first time
+        (-on-connect! computation))
+      (env/add-ref! env id computation))
 
     ;; add new relations
     (doseq [dep deps']
@@ -244,9 +248,7 @@
 
 (defn connect!
   [c]
-  (doto c
-    (-propagate!)
-    (-on-connect!)))
+  (doto c (-propagate!)))
 
 
 (defn disconnect!
