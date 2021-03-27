@@ -14,14 +14,14 @@
 
 
 (defprotocol IIncremental
-  (-identify [incr] "Returns a unique identifier for the incremental object")
-  (-on-connect! [computation])
-  (-on-disconnect! [computation]))
+  (-identify [incr] "Returns a unique identifier for the incremental object"))
 
 
 (defprotocol IComputation
   (-propagate! [computation]
-    "Compute and return new value and whether to update dependents"))
+    "Compute and return new value and whether to update dependents")
+  (-on-connect! [c])
+  (-on-disconnect! [c]))
 
 
 ;;
@@ -115,13 +115,15 @@
   (-propagate! [this]
     ;; recalculate
     (calculate! this input-fn cutoff?))
-
-  IIncremental
-  (-identify [this] id)
-  (-on-connect! [this])
+  (-on-connect! [this]
+    (when (some? on-connect)
+      (on-connect this)))
   (-on-disconnect! [this]
     (when (some? on-disconnect)
       (on-disconnect this)))
+
+  IIncremental
+  (-identify [this] id)
 
   #?(:clj clojure.lang.IDeref
      :cljs IDeref)
@@ -392,6 +394,7 @@
 ;;
 
 
+;; TODO sources should clear themselves from any envs on GC... how?
 (deftype IncrementalSource [id reducer]
   ISource
   (-receive [this x]
@@ -404,8 +407,6 @@
 
   IIncremental
   (-identify [this] id)
-  (-on-connect! [this])
-  (-on-disconnect! [this])
 
   #?(:clj clojure.lang.IDeref
      :cljs IDeref)
