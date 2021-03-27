@@ -605,3 +605,27 @@
        (t/is (= 2 @n))
        (t/is (= 4 @n*2))
        (t/is (= [4] @calls))))))
+
+
+(t/deftest signal-fn
+  (let [n (f/input 0)
+        n+ (f/signal-fn [m]
+             (f/signal (+ @n m)))
+        n+2 (n+ 2)
+        n+10 (n+ 10)
+
+        n*2+12 (f/signal (+ @(n+ 2) @(n+ 10)))]
+    (t/is (not= n+2 n+10))
+    (t/is (and (= n+2 (n+ 2))
+               (= n+10 (n+ 10))))
+
+    (f/connect! n*2+12)
+
+    (t/is (and (f/connected? n+2) (f/connected? n+10)))
+
+    (f/disconnect! n*2+12)
+
+    (t/is (and (not (f/connected? n+2))
+               (not (f/connected? n+10))))
+
+    (t/is (not= (n+ 2) n+2))))
