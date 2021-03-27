@@ -242,25 +242,26 @@
 
 (defn disconnect!
   [c]
-  (let [env *environment*
-        id (-identify c)
-        {:keys [deps computations]} (env/relations! env id)]
-    (when (seq computations)
-      (throw (ex-info "Cannot disconnect computation which has dependents"
-                      {:computations computations})))
+  (when (satisfies? IComputation c)
+    (let [env *environment*
+          id (-identify c)
+          {:keys [deps computations]} (env/relations! env id)]
+      (when (seq computations)
+        (throw (ex-info "Cannot disconnect computation which has dependents"
+                        {:computations computations})))
 
-    ;; remove all relations
-    (doseq [dep deps]
-      (env/remove-relation! env dep id)
-      (let [{:keys [computations]} (env/relations! env dep)]
-        (when (empty? computations)
-          (disconnect! (env/get-ref env dep)))))
+      ;; remove all relations
+      (doseq [dep deps]
+        (env/remove-relation! env dep id)
+        (let [{:keys [computations]} (env/relations! env dep)]
+          (when (empty? computations)
+            (disconnect! (env/get-ref env dep)))))
 
-    ;; remove ref tracker to allow GC of computation
-    (env/clear-ref! env id)
+      ;; remove ref tracker to allow GC of computation
+      (env/clear-ref! env id)
 
-    ;; remove value
-    (env/clear-val! env id)))
+      ;; remove value if not a source
+      (env/clear-val! env id))))
 
 
 (defn watch!
