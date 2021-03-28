@@ -1,0 +1,12 @@
+{:deps true
+
+ :builds
+ {:app {:target :browser
+        :modules {:app {:entries [flex-example.core]
+                        :init-fn flex-example.core/init!}}
+        :output-dir "public/js"
+        :asset-path "/js"
+        :dev {:compiler-options {:output-feature-set :es6}}
+        :devtools {:http-root    "public"
+                   :http-port    3131
+                   :preloads     [devtools.preload]}}}}
