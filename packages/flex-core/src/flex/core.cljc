@@ -390,7 +390,8 @@
         id (-identify c)
         {:keys [deps computations]} (env/relations! env id)]
     (boolean
-     (or (seq deps)
+     (or (satisfies? ISource c) ;; sources are always connected
+         (seq deps)
          (seq computations)
          (env/get-ref env id)))))
 
