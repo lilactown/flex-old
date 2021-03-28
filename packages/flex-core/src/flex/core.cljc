@@ -9,7 +9,6 @@
      :cljs (:require-macros [flex.core])))
 
 
-
 (defprotocol ISource
   (-receive [src x] "Receives a message sent to the source"))
 
