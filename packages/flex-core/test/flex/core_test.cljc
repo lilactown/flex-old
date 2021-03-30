@@ -211,6 +211,17 @@
        (t/is (= [0 1 1 2 3 5 8] @fibs))))))
 
 
+(t/deftest double-connect
+  (async-test
+   (let [n (f/input 0)
+         n+1 (f/signal (inc @n))
+         n+1s (f/collect [] n+1)]
+     (f/connect! n+1s)
+     (f/connect! n+1s)
+
+     (t/is (= [1] @n+1s)))))
+
+
 (t/deftest remove-stale
   (async-test
    (let [n0 (f/input 0)
@@ -660,4 +671,20 @@
 
       (t/is (not= n+2 (!+ n 2)))
       (f/with-env env
-        (not= n+2 (!+ n 2))))))
+        (not= n+2 (!+ n 2)))))
+  (t/testing "multiple"
+    (let [db (f/input {:name "Theodore"
+                       :counter 0})
+          subscribe (f/create-signal-fn
+                     (fn [path]
+                       (f/signal (get-in @db path))))
+          name (subscribe [:name])
+          counter (subscribe [:counter])]
+
+      (f/connect! name)
+      (f/connect! counter)
+
+      (t/is (not= name counter))
+      (t/is (not= (f/-identify name) (f/-identify counter)))
+      (t/is (= "Theodore" @name))
+      (t/is (= 0 @counter)))))

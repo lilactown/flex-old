@@ -176,7 +176,7 @@
    (create-signal {} f))
   ([{:keys [id cutoff? on-disconnect]} f]
    (->IncrementalComputation
-    (or id (gensym "incr_computation"))
+    (gensym (or id "incr_computation"))
     (fn input-fn
       ([] (f))
       ([_prev] (f)))
@@ -185,7 +185,7 @@
   ([{:keys [id cutoff? on-disconnect] :as opts} f0 f1]
    (if (some? f1)
      (->IncrementalComputation
-      (or id (gensym "incr_computation"))
+      (gensym (or id "incr_computation"))
       (fn input-fn
         ([] (f0))
         ([prev] (f1 prev)))
@@ -239,21 +239,19 @@
 
                            ;; (signal {} ,,,)
                            (map? hd)
-                           (let [id (gensym "flex_computation")]
-                             [id (assoc hd :id (list 'quote id)) (cons snd tail)])
+                           [nil hd (cons snd tail)]
 
                            ;; (signal ,,,)
                            :else
-                           (let [id (gensym "flex_computation")]
-                             [id {:id (list 'quote id)} (cons
-                                                         hd
-                                                         (when snd
-                                                           (cons snd tail)))])))
+                           [nil {} (cons
+                                    hd
+                                    (when snd
+                                      (cons snd tail)))]))
         multi-arity? (and (list? (first body))
                           (vector? (ffirst body))
                           (empty? (ffirst body)))]
     (if multi-arity?
-      (let [fn-expr `(fn ~id ~@body)
+      (let [fn-expr `(fn ~@(when (some? id) [id]) ~@body)
             f (gensym)]
         `(let [~f ~fn-expr]
            (create-signal
@@ -305,7 +303,7 @@
    (->IncrementalComputation
     (gensym (str (-identify c) "_collect"))
     (fn
-      ([] (conj init (deref c)))
+      ([] (conj init @c))
       ([coll] (conj coll (deref c))))
     nil nil nil))
   ([init xform c]
@@ -318,12 +316,27 @@
     nil nil nil)))
 
 
+(defn connected?
+  "Returns true if dataflow computation `c` is currently connected."
+  [c]
+  (let [env *environment*
+        id (-identify c)
+        {:keys [deps computations]} (env/relations! env id)]
+    (boolean
+     (or (satisfies? ISource c) ;; sources are always connected
+         (seq deps)
+         (seq computations)
+         (env/get-ref env id)))))
+
+
 (defn connect!
   "Connects a dataflow computation `c` and any of its dependencies. `c` and any
   of its dependencies  will synchronously compute its initial value, and will
   recompute when its dependencies change. Returns `c`."
   [c]
-  (doto c (-propagate!)))
+  (when-not (connected? c)
+    (-propagate! c))
+  c)
 
 
 (defn disconnect!
@@ -331,7 +344,7 @@
   it will not recompute again unless reconnected. Will also disconnect any
   dependencies that have no other dependents. Returns `c`."
   [c]
-  (when (satisfies? IComputation c)
+  (when (and (satisfies? IComputation c) (connected? c))
     (let [env *environment*
           id (-identify c)
           {:keys [deps computations watches]} (env/relations! env id)]
@@ -368,8 +381,7 @@
         id (-identify c)
         computation? (satisfies? IComputation c)]
     (env/add-watcher! env (-identify c) f)
-    (when computation?
-      (connect! c))
+    (connect! c)
     (fn dispose! []
       (env/remove-watcher! env (-identify c) f)
       ;; TODO don't use exceptions for this!!
@@ -383,19 +395,6 @@
         false))))
 
 
-(defn connected?
-  "Returns true if dataflow computation `c` is currently connected."
-  [c]
-  (let [env *environment*
-        id (-identify c)
-        {:keys [deps computations]} (env/relations! env id)]
-    (boolean
-     (or (satisfies? ISource c) ;; sources are always connected
-         (seq deps)
-         (seq computations)
-         (env/get-ref env id)))))
-
-
 ;;
 ;; -- memoized computations
 ;;
@@ -404,6 +403,8 @@
 ;; TODO explore core.memoize
 ;; this may not handle concurrency as well as we'd like
 (def ^:private compute-cache (atom {}))
+
+(comment @( second (vals (get @compute-cache 'flex_comp_fn13)) ))
 
 
 (defn- establish-cache!
