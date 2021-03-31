@@ -688,3 +688,23 @@
       (t/is (not= (f/-identify name) (f/-identify counter)))
       (t/is (= "Theodore" @name))
       (t/is (= 0 @counter)))))
+
+
+(t/deftest recursion
+  (async-test
+   (let [n (f/input 0)
+         fib (f/signal fib
+               ([] (fib [0 1]))
+               ([v]
+                (let [limit @n
+                      [prev cur] v]
+                  (let [next (+ prev cur)]
+                    (if (< next limit)
+                      (f/recur [cur next])
+                      [prev cur])))))]
+     (f/connect! fib)
+     (t/is (= [0 1] @fib))
+
+     (<< (f/send n (constantly 10)))
+
+     (t/is (= [5 8] @fib)))))

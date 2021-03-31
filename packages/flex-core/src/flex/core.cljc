@@ -5,8 +5,9 @@
    [flex.env :as env]
    [flex.scheduler :as scheduler]
    [flex.async-scheduler :as async-scheduler])
-  #?(:clj (:refer-clojure :exclude [send])
-     :cljs (:require-macros [flex.core])))
+  #?@(:clj [(:refer-clojure :exclude [send recur])]
+      :cljs [(:require-macros [flex.core])
+             (:refer-clojure :exclude [recur])]))
 
 
 (defprotocol ISource
@@ -61,8 +62,6 @@
 
 
 (def ^:dynamic *deps* nil)
-
-
 (def none `none)
 
 
@@ -76,51 +75,7 @@
 (declare disconnect!)
 
 
-(defn- calculate!
-  [computation input-fn cutoff?]
-  (let [env *environment*
-        id (-identify computation)
-        v (env/current-val env id none)
-        {:keys [deps]} (env/relations! env id)
-
-        deps-state (atom #{})
-        ;; TODO can we optimize when `rf` returns a reduced?
-        v' (binding [*deps* deps-state]
-             (unreduced (if (= none v)
-                          (input-fn)
-                          (input-fn v))))
-
-        deps' (into #{} (map -identify @deps-state))]
-    (let [ref (env/get-ref env id)]
-      (when (nil? ref)
-        ;; we're connecting for the first time
-        (-on-connect! computation))
-      (env/add-ref! env id computation))
-
-    ;; add new relations
-    (doseq [dep deps']
-      (env/add-relation! env dep id))
-
-    ;; remove stale relations
-    (doseq [dep (set/difference deps deps')]
-      (env/remove-relation! env dep id)
-      (let [{:keys [computations]} (env/relations! env dep)]
-        (when (empty? computations)
-          (disconnect! (env/get-ref env dep)))))
-
-    ;; set order to be the max of any child's order + 1
-    (let [order (->> (for [dep deps']
-                       (env/get-order env dep))
-                     ;; 0 here for when a computation has no deps, we don't
-                     ;; call `max` with no args
-                     (apply max 0)
-                     (inc))]
-      (env/set-order! env id order))
-
-    ;; set value in context
-    (env/set-val! env id v')
-
-    [v' (and (some? cutoff?) (cutoff? v v'))]))
+(declare calculate!)
 
 
 (deftype IncrementalComputation [id input-fn cutoff? on-connect on-disconnect]
@@ -546,6 +501,81 @@
     order+computations)))
 
 
+(defrecord Recursion [deps args])
+
+
+(defn- recur?
+  [x]
+  (instance? Recursion x))
+
+
+(defn recur
+  [& args]
+  (->Recursion nil args))
+
+
+(defn- calculate!
+  [computation input-fn cutoff?]
+  (let [env *environment*
+        id (-identify computation)
+        v (env/current-val env id none)
+        {:keys [deps]} (env/relations! env id)
+        recuring? (recur? v)
+
+        ;; TODO clean this up :(
+        [v initial-deps] (if recuring?
+                           [(get v :args) (get v :deps)]
+                           [v #{}])
+
+        deps-state (atom initial-deps)
+        ;; TODO can we optimize when `rf` returns a reduced?
+        v' (binding [*deps* deps-state]
+             (unreduced (cond
+                          (= none v) (input-fn)
+
+                          recuring? (apply input-fn v)
+
+                          :else
+                          (input-fn v))))
+
+        deps' (into #{} (map -identify @deps-state))]
+    (let [ref (env/get-ref env id)]
+      (when (nil? ref)
+        ;; we're connecting for the first time
+        (-on-connect! computation))
+      (env/add-ref! env id computation))
+
+    (if (recur? v')
+      (do
+        (env/set-val! env id v')
+        [(assoc v' :deps deps') false true])
+      (do
+        ;; add new relations
+        (doseq [dep deps']
+          (env/add-relation! env dep id))
+
+        ;; remove stale relations
+        (doseq [dep (set/difference deps deps')]
+          (env/remove-relation! env dep id)
+          (let [{:keys [computations]} (env/relations! env dep)]
+            (when (empty? computations)
+              (disconnect! (env/get-ref env dep)))))
+
+        ;; set order to be the max of any child's order + 1
+        (let [order (->> (for [dep deps']
+                           (env/get-order env dep))
+                         ;; 0 here for when a computation has no deps, we don't
+                         ;; call `max` with no args
+                         (apply max 0)
+                         (inc))]
+          (env/set-order! env id order))
+
+        ;; set value in context
+        (env/set-val! env id v')
+
+        [v' (and (some? cutoff?) (cutoff? v v')) false]))))
+
+
 (defn send
   "Sends a message to `src`, scheduling computation of its state and any
   dependent dataflow computations. Returns a promise which settles when the
@@ -559,6 +589,7 @@
      nil
      (fn stabilize!
        ([]
+        ;; setup new env and update src that was sent message
         (let [env' (env/branch env)
               id (-identify src)
               v (env/current-val env' id none)
@@ -581,12 +612,12 @@
                 rid (-identify computation)
                 ;; this should never be `none`
                 v (env/current-val env' rid none)
-                [v' cutoff?] (binding [*environment* env']
+                [v' cutoff? recur?] (binding [*environment* env']
                                (-propagate! computation))
                 {:keys [computations watches]} (env/relations! env' rid)
                 heap' (cond-> heap
                         ;; remove computation from heap
-                        true (update order disj computation)
+                        (not recur?) (update order disj computation)
 
                         (and (not cutoff?) (not= v v'))
                         ;; add new computations to the heap
