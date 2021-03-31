@@ -63,6 +63,9 @@
      :cljs (js/Promise. f)))
 
 
+(def max-iterations 1000)
+
+
 (defn async-scheduler
   []
   (let [task-chan (a/chan 10) ;; ??? more ???
@@ -70,7 +73,8 @@
         error-chan (a/chan)]
     ;; main event loop which handles tasks
     (a/go-loop [task (a/<! task-chan)
-                recur-args nil]
+                recur-args nil
+                governor max-iterations]
       (let [res (try
                   (let [recur-args (apply task recur-args)]
                     (cond
@@ -81,13 +85,16 @@
                       [:done]))
                   (catch #?(:clj Exception :cljs js/Error) e
                     [:error e]))]
-        (case (first res)
-          :recur (let [[_ task recur-args] res]
-                   (recur task recur-args))
-          :done (do (a/put! complete-chan :done)
-                    (recur (a/<! task-chan) nil))
-          :error (do (a/put! error-chan (second res))
-                     (recur (a/<! task-chan) nil)))))
+        (if (zero? governor)
+          (do (a/put! error-chan (ex-info "Max iterations reached!" {}))
+              (recur (a/<! task-chan) nil max-iterations))
+          (case (first res)
+            :recur (let [[_ task recur-args] res]
+                     (recur task recur-args (dec governor)))
+            :done (do (a/put! complete-chan :done)
+                      (recur (a/<! task-chan) nil max-iterations))
+            :error (do (a/put! error-chan (second res))
+                       (recur (a/<! task-chan) nil max-iterations))))))
     (reify
       f.s/IScheduler
       (schedule [this _ f]
