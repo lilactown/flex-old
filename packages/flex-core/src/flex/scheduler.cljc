@@ -30,14 +30,20 @@
                  (.then #(run-task! task))))))
 
 
-#?(:clj
-   (deftype SynchronousSchedulerDoNotUse []
-     IScheduler
-     (schedule [this _ task]
-       (run-task! task)
-       (reify
-         clojure.lang.IDeref
-         (deref [_] nil)))))
+(deftype SynchronousSchedulerDoNotUse []
+  IScheduler
+  (schedule [this _ task]
+    #?(:cljs (js/Promise.
+              (fn [res rej]
+                (try
+                  (run-task! task)
+                  (res :done)
+                  (catch js/Error e
+                    (rej e)))))
+       :clj (do (run-task! task)
+                (reify
+                  clojure.lang.IDeref
+                  (deref [_] nil))))))
 
 
 (defn extremely-dumb-scheduler

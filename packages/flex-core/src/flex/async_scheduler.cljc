@@ -75,7 +75,8 @@
     (a/go-loop [task (a/<! task-chan)
                 recur-args nil
                 governor max-iterations]
-      (let [res (try
+      (let [;; #?@(:cljs [t (.getTime (js/Date.))])
+            res (try
                   (let [recur-args (apply task recur-args)]
                     (cond
                       (some? recur-args)
@@ -90,6 +91,7 @@
               (recur (a/<! task-chan) nil max-iterations))
           (case (first res)
             :recur (let [[_ task recur-args] res]
+                     ;; #?(:cljs (println :sched (- (.getTime (js/Date.)) t)))
                      (recur task recur-args (dec governor)))
             :done (do (a/put! complete-chan :done)
                       (recur (a/<! task-chan) nil max-iterations))

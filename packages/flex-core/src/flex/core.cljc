@@ -316,6 +316,8 @@
           (when (empty? computations)
             (disconnect! (env/get-ref env dep)))))
 
+      (env/clear-from-relations! env id)
+
       ;; remove ref tracker to allow GC of computation
       (env/clear-ref! env id)
 

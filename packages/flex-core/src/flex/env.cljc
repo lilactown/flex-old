@@ -66,6 +66,18 @@
   (swap! env* remove-relation src-id computation-id))
 
 
+(defn clear-from-relations
+  [env id]
+  (-> env
+      (update-in [:graph :sources] dissoc id)
+      (update-in [:graph :computations] dissoc id)))
+
+
+(defn clear-from-relations!
+  [env* id]
+  (swap! env* clear-from-relations id))
+
+
 (defn add-watcher!
   [env* id f]
   (swap! env* update-in [:graph :watches id] (fnil conj #{}) f))
