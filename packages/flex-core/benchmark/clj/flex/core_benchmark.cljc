@@ -1,10 +1,10 @@
 (ns flex.core-benchmark
   (:require
    [clojure.core.async :as a]
-   [criterium.core :as c]
    [flex.core :as f]
    [flex.scheduler :as f.s]))
 
+#_(require '[criterium.core :as c])
 
 #_(require '[clj-async-profiler.core :as prof])
 
@@ -30,13 +30,30 @@
         ]
     (f/with-env env
       (f/connect! combo))
-    (doseq [_ (range times)]
-      (f/with-env env
-        @(f/send db update :limit inc)
-        @(f/send db update :chars str "b")))
-    (f/with-env env @combo)))
+    #?(:clj (doseq [_ (range times)]
+              (f/with-env env
+                @(f/send db update :limit inc)
+                @(f/send db update :chars str "b")))
+       :cljs (-> (js/Promise.all
+                  (to-array
+                   (for [_ (range times)]
+                     (-> (f/with-env env
+                           (f/send db update :limit inc))
+                         (.then #(f/with-env env
+                                   (f/send db update :chars str "b")))))))
+                 (.then #(f/with-env env
+                           @combo))))
+    #?(:clj (f/with-env env @combo))))
 
 #_(do (time (run-graph! 1000)) nil)
+
+;; cljs
+#_(let [t (.getTime (js/Date.))
+        run (run-graph! 1000)]
+    (-> run
+        (.then (fn [v]
+                 (let [t' (.getTime (js/Date.))]
+                   (println (- t' t) "msecs"))))))
 
 #_(c/quick-bench (run-graph! 1000))
 
@@ -91,34 +108,33 @@
 
 
 (defn run-calc-async! [times]
-  (a/<!!
-   (a/go-loop [n times
-               limit? true
-               db {:limit 0 :chars "a"}
-               ;; combinations []
-               fib (fib* 0)]
-     (if (zero? n)
-       #_combinations fib
-       (let [limit (:limit db)
-             chars (:chars db)
-             ;; recalculate all fibs every time
-             fib (fib* limit)]
-         (if limit?
-           (recur
-            n
-            (not limit?)
-            (-> db
-                (update :limit inc))
-            #_(conj combinations (vector (second fib) chars))
-            fib)
-           (recur
-            (dec n)
-            (not limit?)
-            (-> db
-                (update :chars str "b"))
-            #_(conj combinations (vector (second fib) chars))
-            fib)))))))
+  (a/go-loop [n times
+              limit? true
+              db {:limit 0 :chars "a"}
+              ;; combinations []
+              fib (fib* 0)]
+    (if (zero? n)
+      #_combinations fib
+      (let [limit (:limit db)
+            chars (:chars db)
+            ;; recalculate all fibs every time
+            fib (fib* limit)]
+        (if limit?
+          (recur
+           n
+           (not limit?)
+           (-> db
+               (update :limit inc))
+           #_(conj combinations (vector (second fib) chars))
+           fib)
+          (recur
+           (dec n)
+           (not limit?)
+           (-> db
+               (update :chars str "b"))
+           #_(conj combinations (vector (second fib) chars))
+           fib))))))
 
-#_(c/quick-bench (run-calc-async! 1000))
+#_(c/quick-bench (<!! (run-calc-async! 1000)))
 
-#_(prof/profile (run-calc-async! 100000))
+#_(prof/profile (<!! (run-calc-async! 100000)))
