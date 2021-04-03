@@ -86,7 +86,7 @@
 (defn remove-watcher
   [env id f]
   (let [env' (update-in env [:graph :watches id] disj f)]
-    (if (cljs.core/empty? (get-in env' [:graph :watches id]))
+    (if (clojure.core/empty? (get-in env' [:graph :watches id]))
       (update-in env' [:graph :watches] dissoc id)
       env')))
 
