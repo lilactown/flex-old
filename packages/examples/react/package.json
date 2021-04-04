@@ -12,6 +12,9 @@
     "shadow-cljs": "^2.11.26"
   },
   "dependencies": {
+    "cytoscape": "^3.18.1",
+    "cytoscape-cola": "^2.4.0",
+    "cytoscape-dagre": "^2.3.2",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
     "react-refresh": "0.8.1"

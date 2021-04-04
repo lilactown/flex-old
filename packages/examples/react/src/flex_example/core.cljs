@@ -1,5 +1,6 @@
 (ns flex-example.core
   (:require
+   [flex.devtools :as f.d]
    [flex-example.counter :as c]
    [flex-example.temperature :as temp]
    [flex-example.flights :as flight]
