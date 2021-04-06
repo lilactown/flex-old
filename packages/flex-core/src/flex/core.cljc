@@ -4,7 +4,8 @@
    [clojure.set :as set]
    [flex.env :as env]
    [flex.scheduler :as scheduler]
-   [flex.async-scheduler :as async-scheduler])
+   [flex.async-scheduler :as async-scheduler]
+   [flex.trace :as trace])
   #?@(:clj [(:refer-clojure :exclude [send recur])]
       :cljs [(:require-macros [flex.core])
              (:refer-clojure :exclude [recur])]))
@@ -609,6 +610,7 @@
      (fn stabilize!
        ([]
         ;; setup new env and update src that was sent message
+        #?(:cljs (trace/observe :stabilize/begin))
         (let [env' (env/branch env)
               id (-identify src)
               v (env/current-val env' id none)
@@ -632,21 +634,25 @@
                 ;; this should never be `none`
                 v (env/current-val env' rid none)
                 captured-fx (atom [])
-                [v' cutoff? recur?] (binding [*environment* env'
-                                              *fx* captured-fx]
-                                      (-propagate! computation))
+                [v' cutoff? recur?] (trace/watch
+                                     :propagate
+                                     (binding [*environment* env'
+                                               *fx* captured-fx]
+                                       (-propagate! computation)))
                 {:keys [computations watches]} (env/relations! env' rid)
-                heap' (cond-> heap
-                        ;; remove computation from heap
-                        (not recur?) (update order disj computation)
+                heap' (trace/watch
+                       :heap
+                       (cond-> heap
+                         ;; remove computation from heap
+                         (not recur?) (update order disj computation)
 
-                        (and (not cutoff?) (not= v v'))
-                        ;; add new computations to the heap
-                        (into-heap
-                         (map (fn [rid]
-                                [(env/get-order env' rid)
-                                 (env/get-ref env' rid)])
-                              computations)))]
+                         (and (not cutoff?) (not= v v'))
+                         ;; add new computations to the heap
+                         (into-heap
+                          (map (fn [rid]
+                                 [(env/get-order env' rid)
+                                  (env/get-ref env' rid)])
+                               computations))))]
             (vector
              env'
              (if (zero? (count (get heap' order)))
@@ -662,6 +668,7 @@
             (do (env/commit! env env')
                 (doseq [f fx]
                   (f))
+                #?(:cljs (trace/measure :stabilize :stabilize/begin))
                 nil)
             ;; another commit has happened between now and when we started
             ;; propagating; restart
