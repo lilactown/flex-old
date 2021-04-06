@@ -708,3 +708,29 @@
      (<< (f/send n (constantly 10)))
 
      (t/is (= [5 8] @fib)))))
+
+
+(t/deftest defer
+  (let [n (f/input 0)
+        calls (atom 0)
+        n+1 (f/signal
+              (f/defer
+                (swap! calls inc))
+              (inc @n))
+        _ (f/connect! n+1)
+        tx (f/send n inc)]
+    (t/is (= 1 @calls))
+    (<< tx)
+    (t/is (= 2 @calls))
+    (t/testing "failure"
+      (let [fails-above-2 (f/signal
+                            (if (< @n 3)
+                              @n
+                              (throw (ex-info "oh no :( TOO BIG" {}))))]
+        (f/connect! fails-above-2)
+        (<< (f/send n inc)) ;; 2
+        (t/is (= 3 @calls))
+        (t/is (thrown?
+               #?(:clj Exception :cljs js/Error)
+               (<< (f/send n inc)))) ;; 3
+        (t/is (= 3 @calls))))))

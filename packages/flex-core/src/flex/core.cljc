@@ -62,6 +62,7 @@
 
 
 (def ^:dynamic *deps* nil)
+(def ^:dynamic *fx* nil)
 (def none `none)
 
 
@@ -178,9 +179,9 @@
    :forms '[(signal name? opts? exprs*)
             (signal name? opts? ([] exprs*))
             (signal name?
-              opts?
-              ([] exprs*)
-              ([prev] exprs*))]}
+                    opts?
+                    ([] exprs*)
+                    ([prev] exprs*))]}
   [& body]
   (let [[id opts body] (let [[hd snd & tail] body]
                          (cond
@@ -290,7 +291,10 @@
   recompute when its dependencies change. Returns `c`."
   [c]
   (when-not (connected? c)
-    (-propagate! c))
+    (binding [*fx* (atom [])]
+      (-propagate! c)
+      (doseq [f @*fx*]
+        (f))))
   c)
 
 
@@ -578,6 +582,19 @@
         [v' (and (some? cutoff?) (cutoff? v v')) false]))))
 
 
+
+(defn defer*
+  "Defer execution of some side-effecting function until the computation's state
+  is updated successfully."
+  [f]
+  (swap! *fx* conj f))
+
+
+(defmacro defer
+  [& body]
+  `(defer* (fn [] ~@body)))
+
+
 (defn send
   "Sends a message to `src`, scheduling computation of its state and any
   dependent dataflow computations. Returns a promise which settles when the
@@ -604,7 +621,7 @@
                        [(env/get-order env' cid)
                         (env/get-ref env' cid)])
                      computations))
-              fx (into #{} (map (fn [f] #(f v'))) watches)]
+              fx (into [] (map (fn [f] #(f v'))) watches)]
           (when-not (identical? v v')
             (env/set-val! env' id v')
             [env' heap fx])))
@@ -614,8 +631,10 @@
                 rid (-identify computation)
                 ;; this should never be `none`
                 v (env/current-val env' rid none)
-                [v' cutoff? recur?] (binding [*environment* env']
-                               (-propagate! computation))
+                captured-fx (atom [])
+                [v' cutoff? recur?] (binding [*environment* env'
+                                              *fx* captured-fx]
+                                      (-propagate! computation))
                 {:keys [computations watches]} (env/relations! env' rid)
                 heap' (cond-> heap
                         ;; remove computation from heap
@@ -635,9 +654,9 @@
                ;; lowest order is always first
                (dissoc heap' order)
                heap')
-             (if cutoff?
-               fx
-               (into fx (map (fn [f] #(f v'))) watches))))
+             ;; always run `defer` in body
+             (cond-> (into fx @captured-fx)
+               (not cutoff?) (into (map (fn [f] #(f v'))) watches))))
           ;; wrap it up
           (if (env/is-parent? env env')
             (do (env/commit! env env')
