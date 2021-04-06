@@ -1,7 +1,7 @@
 (ns flex-example.util
   (:require
    [flex.core :as f]
-   [helix.core :refer [defhook]]
+   [helix.core :refer [$ defhook]]
    [helix.dom :as d]
    [helix.hooks :as hooks]))
 
@@ -24,26 +24,24 @@
                   (f/watch! s cb))})))
 
 
-(defhook use-async-input
-  [{:keys [value default-value on-change] :as props}]
+(defhook use-synchronized-state
+  [value change-fn]
   (let [[v set-v] (hooks/use-state
-                   (or value
-                       default-value))
+                   value)
         prev-value (hooks/use-ref value)]
     (hooks/use-layout-effect
      [value]
      (cond
-       ;; controlled input given new value that was not initiated via on-change
+       ;; given new value that was not initiated via change-fn
        (and (not= v value) (not= @prev-value value))
        (do (set-v value)
            (reset! prev-value value))
 
-       ;; new value that was initiated via on-change, keep track of this
+       ;; new value that was initiated via change-fn, keep track of this
        (not= @prev-value value)
        (reset! prev-value value)))
-    (d/input
-     {:value v
-      :on-change (fn [e]
-                   (set-v (.. e -target -value))
-                   (on-change e))
-      & (dissoc props :value :default-value :on-change)})))
+    [v (hooks/use-callback
+        [change-fn]
+        (fn [v']
+          (set-v v')
+          (change-fn v')))]))

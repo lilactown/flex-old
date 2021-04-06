@@ -1,7 +1,7 @@
 (ns flex-example.temperature
   (:require
    [flex.core :as f]
-   [flex-example.util :refer [use-signal use-async-input]]
+   [flex-example.util :refer [use-signal use-synchronized-state]]
    [helix.core :refer [defnc $]]
    [helix.dom :as d]
    [helix.hooks :as hooks]))
@@ -46,9 +46,15 @@
 (defnc converter
   []
   (let [{:keys [F C]
-         :or {F "" C ""}} (use-signal temperature)]
+         :or {F "" C ""}} (use-signal temperature)
+        [F set-F] (use-synchronized-state
+                   F
+                   #(f/send temperature :F-change %))
+        [C set-C] (use-synchronized-state
+                   C
+                   #(f/send temperature :C-change %))]
     (d/div
-     (use-async-input
+     (d/input
       {:style (cond
                 (not (or (= "" C) (valid-number? C)))
                 {:background "red"}
@@ -56,9 +62,9 @@
                 (and (= "" F) (not= "" C))
                 {:background "grey"})
        :value C
-       :on-change #(f/send temperature :C-change (.. % -target -value))})
+       :on-change #(set-C (.. % -target -value))})
      " Celcius = "
-     (use-async-input
+     (d/input
       {:style (cond
                 (not (or (= "" F) (valid-number? F)))
                 {:background "red"}
@@ -66,5 +72,5 @@
                 (and (= "" C) (not= "" F))
                 {:background "grey"})
        :value F
-       :on-change #(f/send temperature :F-change (.. % -target -value))})
+       :on-change #(set-F (.. % -target -value))})
      " Fahrenheit")))
